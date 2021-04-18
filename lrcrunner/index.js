@@ -136,7 +136,6 @@ Promise.resolve().then(async () => {
     downloadReport,
     settings,
     reportType,
-    scripts,
   } = testOpts;
 
   if (!testId && _.isEmpty(name)) {
@@ -182,6 +181,12 @@ Promise.resolve().then(async () => {
     }
   } else {
     // process #2: create new test
+
+    let { scripts } = testOpts;
+    if (_.isEmpty(scripts)) {
+      scripts = testOpts.script;
+    }
+
     if (!_.isArray(scripts) || scripts.length <= 0) {
       throw new Error('script is required');
     }
