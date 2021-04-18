@@ -1,0 +1,41 @@
+{
+  "name": "lrcrunner",
+  "version": "1.0.0",
+  "description": "local executor for LoadRunner Cloud",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "bin": {
+    "lrcrunner": "./index.js"
+  },
+  "contributors": [
+    {
+      "name": "Han Lin",
+      "email": "han.lin@microfocus.com"
+    },
+    {
+      "name": "Wei Sun",
+      "email": "wei.sun10@microfocus.com"
+    }
+  ],
+  "engines": {
+    "node": ">=12.13"
+  },
+  "dependencies": {
+    "commander": "7.2.0",
+    "form-data": "4.0.0",
+    "fs-extra": "9.1.0",
+    "got": "^11.8.2",
+    "js-yaml": "4.1.0",
+    "lodash": "4.17.21",
+    "tunnel": "0.0.6"
+  },
+  "devDependencies": {
+    "eslint": "7.24.0",
+    "eslint-config-airbnb-base": "14.2.1",
+    "eslint-plugin-import": "2.22.1"
+  }
+}
