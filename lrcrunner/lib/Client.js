@@ -16,6 +16,8 @@ const got = require('got');
 const tunnel = require('tunnel');
 const FormData = require('form-data');
 
+const MAX_DOWNLOAD_TIME = 10 * 60000;
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 class Client {
@@ -23,6 +25,8 @@ class Client {
     this.server = url;
     this.logger = logger;
     this.tenant = tenant;
+
+    this.retries = 0;
 
     if (proxy) {
       const proxyUrl = new URL(proxy);
@@ -66,6 +70,16 @@ class Client {
         })(),
       ],
     });
+  }
+
+  async checkAndRetryAuthClient(err) {
+    if (err.statusCode === 401 && this.credentials && this.retries <= 3) {
+      this.retries += 1;
+      await this.authClient(this.credentials);
+      return true;
+    }
+    this.retries = 0;
+    return false;
   }
 
   getDefaultOptions() {
@@ -120,11 +134,22 @@ class Client {
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/${runId}/status`, opt)
       .catch(async (err) => {
-        if (err.statusCode === 401 && that.credentials) {
-          await that.authClient(that.credentials);
+        if (await that.checkAndRetryAuthClient(err)) {
           return that.getTestRunStatus(runId);
         }
         throw new Error(`getting run status failed: ${err.message}`);
+      });
+  }
+
+  async getTestRun(runId) {
+    const that = this;
+    const opt = this.getDefaultOptions();
+    return this._client.get(`v1/test-runs/${runId}`, opt)
+      .catch(async (err) => {
+        if (await that.checkAndRetryAuthClient(err)) {
+          return that.getTestRun(runId);
+        }
+        throw new Error(`getting run result failed: ${err.message}`);
       });
   }
 
@@ -244,8 +269,7 @@ class Client {
     opt.json = { reportType };
     return this._client.post(`v1/test-runs/${runId}/reports`, opt)
       .catch(async (err) => {
-        if (err.statusCode === 401 && that.credentials) {
-          await that.authClient(that.credentials);
+        if (await that.checkAndRetryAuthClient(err)) {
           return that.createTestRunReport(runId, reportType);
         }
         throw new Error(`creating run report failed: ${err.message}`);
@@ -262,6 +286,12 @@ class Client {
       try {
         const downloadStream = got(`v1/test-runs/reports/${reportId}`, opt);
         const fileWriterStream = fs.createWriteStream(fileName);
+
+        setTimeout(() => {
+          downloadStream.destroy();
+          fileWriterStream.destroy();
+          reject(new Error('Download time exceeds 10 minutes'));
+        }, MAX_DOWNLOAD_TIME);
 
         downloadStream
           .on('downloadProgress', ({ transferred }) => {
@@ -304,8 +334,7 @@ class Client {
       return null;
     })
       .catch(async (err) => {
-        if (err.statusCode === 401 && that.credentials) {
-          await that.authClient(that.credentials);
+        if (await that.checkAndRetryAuthClient(err)) {
           return that.downloadTestRunReport(fileName, reportId);
         }
         throw err;
@@ -317,8 +346,7 @@ class Client {
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/reports/${reportId}`, opt)
       .catch(async (err) => {
-        if (err.statusCode === 401 && that.credentials) {
-          await that.authClient(that.credentials);
+        if (await that.checkAndRetryAuthClient(err)) {
           return that.checkTestRunReport(reportId);
         }
         throw new Error(`checking run report failed: ${err.message}`);

@@ -33,7 +33,23 @@ program.parse(process.argv);
 const options = program.opts();
 const logger = console;
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const createAndDownloadReport = async (
+  runId, downloadReport, reportType, currStatus, client, artifacts_folder, name,
+) => {
+  const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
+  if (downloadReport && reportType && _.includes(hasReportUIStatus, currStatus.detailedStatus)) {
+    const runResult = await client.getTestRun(runId);
+    if (runResult.isTerminated) {
+      logger.info(`preparing report (${reportType}) ...`);
+      const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
+      const report = await client.createTestRunReport(runId, reportType);
+      if (_.isSafeInteger(_.get(report, 'reportId'))) {
+        return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+      }
+    }
+  }
+  return logger.info('report is not available');
+};
 
 Promise.resolve().then(async () => {
   const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
@@ -164,19 +180,8 @@ Promise.resolve().then(async () => {
       logger.info(`running test "${test.name}" ...`);
       const run = await client.runTest(projectId, testId);
       logger.info(`run id: ${run.runId}`);
-      await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
-
-      if (downloadReport && reportType) {
-        logger.info(`preparing report (${reportType}) ...`);
-        await wait(REPORT_POLLING_INTERVAL);
-        const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${test.name}).${reportType}`);
-        const report = await client.createTestRunReport(run.runId, reportType);
-        if (_.isSafeInteger(_.get(report, 'reportId'))) {
-          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-        } else {
-          logger.info('report is not available');
-        }
-      }
+      const currStatus = await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
+      await createAndDownloadReport(run.runId, downloadReport, reportType, currStatus, client, artifacts_folder, name);
     } else {
       logger.error(`test ${testId} does not exist in project ${projectId}`);
     }
@@ -261,19 +266,8 @@ Promise.resolve().then(async () => {
         logger.info('"detach" flag is enabled. exit');
         return;
       }
-      await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
-
-      if (downloadReport && reportType) {
-        logger.info(`preparing report (${reportType}) ...`);
-        await wait(REPORT_POLLING_INTERVAL);
-        const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${name}).${reportType}`);
-        const report = await client.createTestRunReport(run.runId, reportType);
-        if (_.isSafeInteger(_.get(report, 'reportId'))) {
-          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-        } else {
-          logger.info('report is not available');
-        }
-      }
+      const currStatus = await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
+      await createAndDownloadReport(run.runId, downloadReport, reportType, currStatus, client, artifacts_folder, name);
     } else {
       logger.info('"runTest" flag is not enabled. exit');
     }
