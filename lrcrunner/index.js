@@ -23,7 +23,8 @@ const RUN_POLLING_INTERVAL = 15 * 1000;
 const REPORT_POLLING_INTERVAL = 10 * 1000;
 
 program.version('1.0.0', '-v, --version', 'print version');
-program.option('-r, --run <config file>', 'execute test with specified config file', '')
+program.description('test executor for LoadRunner Cloud')
+  .option('-r, --run <config file>', 'run with specified configuration file', '')
   .option('-u, --url <url>', 'LRC url')
   .option('-i, --client_id <client id>', 'LRC client id')
   .option('-s, --client_secret <client secret>', 'LRC client secret');
@@ -33,8 +34,6 @@ const options = program.opts();
 const logger = console;
 
 Promise.resolve().then(async () => {
-  // logger.info(`options: ${JSON.stringify(options)}`);
-
   let configFile;
   if (options.run) {
     if (_.isEmpty(options.run)) {
@@ -46,8 +45,8 @@ Promise.resolve().then(async () => {
 
   logger.info(`config file: ${configFile}`);
 
-  const ymlFileData = await fs.promises.readFile(configFile, 'utf8');
-  const config = yaml.load(ymlFileData);
+  const configFileData = await fs.promises.readFile(configFile, 'utf8');
+  const config = yaml.load(configFileData);
 
   // logger.info(`config data: ${JSON.stringify(config)}`);
 
@@ -78,18 +77,27 @@ Promise.resolve().then(async () => {
     throw new Error('API access keys are missing');
   }
 
+  const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
+
   const lrcCfg = config.modules.lrc;
 
   let lrcUrl = options.url || lrcCfg.url;
   if (_.isEmpty(lrcUrl)) {
-    lrcUrl = 'https://loadrunner-cloud.saas.microfocus.com';
+    if (isLocalTesting) {
+      lrcUrl = 'http://127.0.0.1:3030';
+    } else {
+      lrcUrl = 'https://loadrunner-cloud.saas.microfocus.com';
+    }
   }
 
   let lrcURLObject;
   try {
     lrcURLObject = new URL(lrcUrl);
-    if (lrcURLObject.port === '3030') {
-      lrcURLObject.port = '3032';
+
+    if (isLocalTesting) {
+      if (lrcURLObject.port === '3030') {
+        lrcURLObject.port = '3032';
+      }
     }
   } catch (ex) {
     throw new Error('invalid LRC url');
@@ -124,16 +132,16 @@ Promise.resolve().then(async () => {
 
   const {
     testId,
-    testName,
+    name,
     runTest,
     detach,
     downloadReport,
-    testSettings,
+    settings,
     reportType,
     scripts,
   } = testOpts;
 
-  if (!testId && _.isEmpty(testName)) {
+  if (!testId && _.isEmpty(name)) {
     throw new Error('test name is missing');
   }
 
@@ -144,14 +152,14 @@ Promise.resolve().then(async () => {
   }
 
   const client = new Client(lrcCfg.tenant, lrcURLObject, proxy, logger);
-  if (process.env.NODE_ENV !== 'development') {
+  if (!isLocalTesting) {
     await client.authClient({ client_id, client_secret });
   }
 
   if (testId) {
     logger.info(`test id: ${testId}`);
 
-    // process #1: run exists test
+    // process #1: run existing test
     const test = await client.getTest(projectId, testId);
     if (test && test.id === testId) {
       logger.info(`running test "${test.name}" ...`);
@@ -181,16 +189,16 @@ Promise.resolve().then(async () => {
     }
 
     // create test
-    logger.info(`going to create test: ${testName}`);
-    const newTest = await client.createTest(projectId, { name: testName });
+    logger.info(`going to create test: ${name}`);
+    const newTest = await client.createTest(projectId, { name });
     logger.info(`created test. id: ${newTest.id}, name: ${newTest.name}`);
 
     // test settings
-    if (testSettings) {
+    if (settings) {
       logger.info('retrieving test settings');
       const newTestSettings = await client.getTestSettings(projectId, newTest.id);
       logger.info('updating test settings');
-      await client.updateTestSettings(projectId, newTest.id, _.merge(newTestSettings, testSettings));
+      await client.updateTestSettings(projectId, newTest.id, _.merge(newTestSettings, settings));
     }
 
     // test scripts
@@ -246,7 +254,7 @@ Promise.resolve().then(async () => {
       const run = await client.runTest(projectId, newTest.id);
       logger.info(`run id: ${run.runId}`);
       if (detach) {
-        logger.info('detach flag is enabled. exit');
+        logger.info('"detach" flag is enabled. exit');
         return;
       }
       await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
@@ -254,7 +262,7 @@ Promise.resolve().then(async () => {
       if (downloadReport && reportType) {
         logger.info(`preparing report (${reportType}) ...`);
         setTimeout(async () => {
-          const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${testName}).${reportType}`);
+          const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${name}).${reportType}`);
           const report = await client.createTestRunReport(run.runId, reportType);
           if (_.isSafeInteger(report.reportId)) {
             await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
@@ -263,6 +271,8 @@ Promise.resolve().then(async () => {
           }
         }, REPORT_POLLING_INTERVAL);
       }
+    } else {
+      logger.info('"runTest" flag is not enabled. exit');
     }
   }
 }).catch((err) => {

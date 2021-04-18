@@ -1,12 +1,9 @@
 {
   "name": "lrcrunner",
   "version": "1.0.0",
-  "description": "local executor for LoadRunner Cloud",
+  "description": "test executor for LoadRunner Cloud",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
+  "author": "Micro Focus or one of its affiliates",
   "license": "ISC",
   "bin": {
     "lrcrunner": "./index.js"
