@@ -16,6 +16,8 @@ const got = require('got');
 const tunnel = require('tunnel');
 const FormData = require('form-data');
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 class Client {
   constructor(tenant, url, proxy, logger) {
     this.server = url;
@@ -51,6 +53,13 @@ class Client {
           try {
             result = JSON.parse(response.body);
           } catch (e) {
+            // Better to use the response returned 401 error instead
+            if ((response.body.indexOf('Sign in with corporate credentials') >= 0)
+                && (response.body.indexOf('Submit your email address') >= 0)) {
+              const currErr = new Error('Unauthorized');
+              currErr.statusCode = 401;
+              throw currErr;
+            }
             result = response.body;
           }
           return result;
@@ -80,6 +89,7 @@ class Client {
   }
 
   async authClient(json = {}) {
+    this.credentials = json;
     const opt = this.getDefaultOptions();
     opt.json = json;
     const result = await this._client.post('v1/auth-client', opt)
@@ -106,34 +116,33 @@ class Client {
   }
 
   async getTestRunStatus(runId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/${runId}/status`, opt)
-      .catch((err) => {
+      .catch(async (err) => {
+        if (err.statusCode === 401 && that.credentials) {
+          await that.authClient(that.credentials);
+          return that.getTestRunStatus(runId);
+        }
         throw new Error(`getting run status failed: ${err.message}`);
       });
   }
 
   async getTestRunStatusPolling(runId, time = 5000) {
     const that = this;
-    return new Promise((resolve, reject) => {
-      async function refresh() {
-        try {
-          const currStatus = await that.getTestRunStatus(runId);
-          that.logger.info(currStatus.detailedStatus);
+    async function polling() {
+      const currStatus = await that.getTestRunStatus(runId);
+      that.logger.info(currStatus.detailedStatus);
 
-          if (currStatus.status === 'in-progress') {
-            setTimeout(refresh, time);
-          } else {
-            return resolve();
-          }
-        } catch (e) {
-          return reject(e);
-        }
-        return 1;
+      if (currStatus.status === 'in-progress') {
+        await wait(time);
+        return polling();
       }
+      return currStatus;
+    }
 
-      setTimeout(refresh, time);
-    });
+    await wait(time);
+    return polling();
   }
 
   async createTest(projectId, json) {
@@ -230,10 +239,15 @@ class Client {
   }
 
   async createTestRunReport(runId, reportType) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = { reportType };
     return this._client.post(`v1/test-runs/${runId}/reports`, opt)
-      .catch((err) => {
+      .catch(async (err) => {
+        if (err.statusCode === 401 && that.credentials) {
+          await that.authClient(that.credentials);
+          return that.createTestRunReport(runId, reportType);
+        }
         throw new Error(`creating run report failed: ${err.message}`);
       });
   }
@@ -243,58 +257,90 @@ class Client {
 
     const opt = this.getDefaultOptions();
     opt.isStream = true;
-    const downloadStream = got(`v1/test-runs/reports/${reportId}`, opt);
-    const fileWriterStream = fs.createWriteStream(fileName);
+    return new Promise((resolve, reject) => {
+      let isNotReturn = false;
+      try {
+        const downloadStream = got(`v1/test-runs/reports/${reportId}`, opt);
+        const fileWriterStream = fs.createWriteStream(fileName);
 
-    downloadStream
-      .on('downloadProgress', ({ transferred }) => {
-        that.logger.info(`downloading report ...... ${transferred} (bytes)`);
-      })
-      .on('error', (error) => {
-        that.logger.error(`downloading failed: ${error.message}`);
+        downloadStream
+          .on('downloadProgress', ({ transferred }) => {
+            that.logger.info(`downloading report ...... ${transferred} (bytes)`);
+          })
+          .on('error', (error) => {
+            that.logger.error(`downloading failed: ${error.message}`);
+            if (isNotReturn) {
+              isNotReturn = false;
+              return reject(error);
+            }
+            return null;
+          });
+
+        fileWriterStream
+          .on('error', (error) => {
+            that.logger.error(`failed to write file: ${error.message}`);
+            if (isNotReturn) {
+              isNotReturn = false;
+              return reject(error);
+            }
+            return null;
+          })
+          .on('finish', () => {
+            that.logger.info(`downloaded to ${fileName}`);
+            if (isNotReturn) {
+              isNotReturn = false;
+              return resolve();
+            }
+            return null;
+          });
+
+        downloadStream.pipe(fileWriterStream);
+      } catch (e) {
+        if (isNotReturn) {
+          isNotReturn = false;
+          return reject(e);
+        }
+      }
+      return null;
+    })
+      .catch(async (err) => {
+        if (err.statusCode === 401 && that.credentials) {
+          await that.authClient(that.credentials);
+          return that.downloadTestRunReport(fileName, reportId);
+        }
+        throw err;
       });
-
-    fileWriterStream
-      .on('error', (error) => {
-        that.logger.error(`failed to write file: ${error.message}`);
-      })
-      .on('finish', () => {
-        that.logger.info(`downloaded to ${fileName}`);
-      });
-
-    downloadStream.pipe(fileWriterStream);
   }
 
   async checkTestRunReport(reportId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/reports/${reportId}`, opt)
-      .catch((err) => {
+      .catch(async (err) => {
+        if (err.statusCode === 401 && that.credentials) {
+          await that.authClient(that.credentials);
+          return that.checkTestRunReport(reportId);
+        }
         throw new Error(`checking run report failed: ${err.message}`);
       });
   }
 
   async getTestRunReportPolling(name, reportId, time = 5000) {
     const that = this;
-    return new Promise((resolve, reject) => {
-      async function refresh() {
-        try {
-          const currReport = await that.checkTestRunReport(reportId);
-          if (currReport.message === 'In progress') {
-            that.logger.info(`report (${reportId}) is not yet ready`);
-            setTimeout(refresh, time);
-          } else {
-            that.logger.info('report is ready, going to download it');
-            await that.downloadTestRunReport(name, reportId);
-            return resolve(currReport);
-          }
-        } catch (e) {
-          return reject(e);
-        }
-        return null;
+    async function polling() {
+      const currReport = await that.checkTestRunReport(reportId);
+      if (currReport.message === 'In progress') {
+        that.logger.info(`report (${reportId}) is not yet ready`);
+        await wait(time);
+        return polling();
       }
+      that.logger.info('report is ready, going to download it');
+      await that.downloadTestRunReport(name, reportId);
+      return currReport;
+    }
 
-      setTimeout(refresh, time);
-    });
+    await wait(time);
+    return polling();
   }
 }
 

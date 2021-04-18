@@ -33,6 +33,8 @@ program.parse(process.argv);
 const options = program.opts();
 const logger = console;
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 Promise.resolve().then(async () => {
   const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
 
@@ -166,15 +168,14 @@ Promise.resolve().then(async () => {
 
       if (downloadReport && reportType) {
         logger.info(`preparing report (${reportType}) ...`);
-        setTimeout(async () => {
-          const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${test.name}).${reportType}`);
-          const report = await client.createTestRunReport(run.runId, reportType);
-          if (_.isSafeInteger(report.reportId)) {
-            await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-          } else {
-            logger.info('report is not available');
-          }
-        }, REPORT_POLLING_INTERVAL);
+        await wait(REPORT_POLLING_INTERVAL);
+        const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${test.name}).${reportType}`);
+        const report = await client.createTestRunReport(run.runId, reportType);
+        if (_.isSafeInteger(_.get(report, 'reportId'))) {
+          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+        } else {
+          logger.info('report is not available');
+        }
       }
     } else {
       logger.error(`test ${testId} does not exist in project ${projectId}`);
@@ -264,15 +265,14 @@ Promise.resolve().then(async () => {
 
       if (downloadReport && reportType) {
         logger.info(`preparing report (${reportType}) ...`);
-        setTimeout(async () => {
-          const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${name}).${reportType}`);
-          const report = await client.createTestRunReport(run.runId, reportType);
-          if (_.isSafeInteger(report.reportId)) {
-            await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-          } else {
-            logger.info('report is not available');
-          }
-        }, REPORT_POLLING_INTERVAL);
+        await wait(REPORT_POLLING_INTERVAL);
+        const resultPath = path.join(artifacts_folder, `./results (run #${run.runId} of ${name}).${reportType}`);
+        const report = await client.createTestRunReport(run.runId, reportType);
+        if (_.isSafeInteger(_.get(report, 'reportId'))) {
+          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+        } else {
+          logger.info('report is not available');
+        }
       }
     } else {
       logger.info('"runTest" flag is not enabled. exit');
