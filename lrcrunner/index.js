@@ -19,8 +19,8 @@ const { URL } = require('url');
 const { program } = require('commander');
 const Client = require('./lib/Client');
 
-const RUN_POLLING_INTERVAL = 15 * 1000;
-const REPORT_POLLING_INTERVAL = 10 * 1000;
+const RUN_POLLING_INTERVAL = 20 * 1000;
+const REPORT_POLLING_INTERVAL = 20 * 1000;
 
 program.version('1.0.0', '-v, --version', 'print version');
 program.description('test executor for LoadRunner Cloud')
