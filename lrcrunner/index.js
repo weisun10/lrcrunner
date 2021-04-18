@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /*
- * #© Copyright 2020 - Micro Focus or one of its affiliates
+ * #© Copyright 2021 - Micro Focus or one of its affiliates
  * #
  * # The only warranties for products and services of Micro Focus and its affiliates and licensors (“Micro Focus”)
  * # are as may be set forth in the express warranty statements accompanying such products and services.
@@ -24,23 +24,21 @@ const REPORT_POLLING_INTERVAL = 10 * 1000;
 
 program.version('1.0.0', '-v, --version', 'print version');
 program.description('test executor for LoadRunner Cloud')
-  .option('-r, --run <config file>', 'run with specified configuration file', '')
-  .option('-u, --url <url>', 'LRC url')
-  .option('-i, --client_id <client id>', 'LRC client id')
-  .option('-s, --client_secret <client secret>', 'LRC client secret');
+  .option('-r, --run [config file]', 'run with specified configuration file', '')
+  .option('-u, --url [url]', 'LRC url')
+  .option('-i, --client_id [client id]', 'LRC client id')
+  .option('-s, --client_secret [client secret]', 'LRC client secret');
 program.parse(process.argv);
 
 const options = program.opts();
 const logger = console;
 
 Promise.resolve().then(async () => {
-  let configFile;
-  if (options.run) {
-    if (_.isEmpty(options.run)) {
-      configFile = process.env.LRC_TEST_CONFIG;
-    } else {
-      configFile = options.run;
-    }
+  const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
+
+  const configFile = options.run;
+  if (_.isEmpty(configFile)) {
+    throw new Error('configuration file is missing');
   }
 
   logger.info(`config file: ${configFile}`);
@@ -73,11 +71,11 @@ Promise.resolve().then(async () => {
   const client_id = options.client_id || process.env.LRC_CLIENT_ID;
   const client_secret = options.client_secret || process.env.LRC_CLIENT_SECRET;
 
-  if (_.isEmpty(client_id) || _.isEmpty(client_secret)) {
-    throw new Error('API access keys are missing');
+  if (!isLocalTesting) {
+    if (_.isEmpty(client_id) || _.isEmpty(client_secret)) {
+      throw new Error('API access keys are missing');
+    }
   }
-
-  const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
 
   const lrcCfg = config.modules.lrc;
 
