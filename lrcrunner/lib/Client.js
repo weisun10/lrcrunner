@@ -26,8 +26,6 @@ class Client {
     this.logger = logger;
     this.tenant = tenant;
 
-    this.retries = 0;
-
     if (proxy) {
       const proxyUrl = new URL(proxy);
       this.proxy = {
@@ -72,16 +70,6 @@ class Client {
     });
   }
 
-  async checkAndRetryAuthClient(err) {
-    if (err.statusCode === 401 && this.credentials && this.retries <= 3) {
-      this.retries += 1;
-      await this.authClient(this.credentials);
-      return true;
-    }
-    this.retries = 0;
-    return false;
-  }
-
   getDefaultOptions() {
     const options = {
       prefixUrl: this.server,
@@ -103,29 +91,35 @@ class Client {
   }
 
   async authClient(json = {}) {
+    const that = this;
     this.credentials = json;
     const opt = this.getDefaultOptions();
     opt.json = json;
     const result = await this._client.post('v1/auth-client', opt)
       .catch((err) => {
-        throw new Error(`authentication failed: ${err.message}`);
+        that.logger.error(`authentication failed: ${err.message}`);
+        throw err;
       });
     this.token = result.token;
   }
 
   async getTest(projectId, testId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/projects/${projectId}/load-tests/${testId}`, opt)
       .catch((err) => {
-        throw new Error(`failed to get test: ${err.message}`);
+        that.logger.error(`failed to get test: ${err.message}`);
+        throw err;
       });
   }
 
   async runTest(projectId, testId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.post(`v1/projects/${projectId}/load-tests/${testId}/runs`, opt)
       .catch((err) => {
-        throw new Error(`running test failed: ${err.message}`);
+        that.logger.error(`running test failed: ${err.message}`);
+        throw err;
       });
   }
 
@@ -133,11 +127,9 @@ class Client {
     const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/${runId}/status`, opt)
-      .catch(async (err) => {
-        if (await that.checkAndRetryAuthClient(err)) {
-          return that.getTestRunStatus(runId);
-        }
-        throw new Error(`getting run status failed: ${err.message}`);
+      .catch((err) => {
+        that.logger.error(`getting run status failed: ${err.message}`);
+        throw err;
       });
   }
 
@@ -145,11 +137,9 @@ class Client {
     const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/${runId}`, opt)
-      .catch(async (err) => {
-        if (await that.checkAndRetryAuthClient(err)) {
-          return that.getTestRun(runId);
-        }
-        throw new Error(`getting run result failed: ${err.message}`);
+      .catch((err) => {
+        that.logger.error(`getting run result failed: ${err.message}`);
+        throw err;
       });
   }
 
@@ -171,35 +161,45 @@ class Client {
   }
 
   async createTest(projectId, json) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = json;
     return this._client.post(`v1/projects/${projectId}/load-tests`, opt)
       .catch((err) => {
-        throw new Error(`creating test failed: ${err.message}`);
+        that.logger.error(`creating test failed: ${err.message}`);
+        throw err;
       });
   }
 
   async getTestSettings(projectId, testId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/projects/${projectId}/load-tests/${testId}/settings`, opt)
       .catch((err) => {
-        throw new Error(`getting test settings failed: ${err.message}`);
+        that.logger.error(`getting test settings failed: ${err.message}`);
+        throw err;
       });
   }
 
   async updateTestSettings(projectId, testId, json) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = json;
     return this._client.put(`v1/projects/${projectId}/load-tests/${testId}/settings`, opt)
       .catch((err) => {
-        throw new Error(`updating test settings failed: ${err.message}`);
+        that.logger.error(`updating test settings failed: ${err.message}`);
+        throw err;
       });
   }
 
   async uploadScript(projectId, filePath) {
+    const that = this;
     const stats = await fs.promises.stat(filePath);
     if (!stats || !stats.size) {
-      throw new Error(`file '${filePath}' does not exist`);
+      const err = new Error(`file '${filePath}' does not exist`);
+      err.statusCode = 400;
+      that.logger.error(err.message);
+      throw err;
     }
     const opt = this.getDefaultOptions();
     const form = new FormData();
@@ -208,58 +208,71 @@ class Client {
     opt.headers['content-type'] = `multipart/form-data; boundary=${form.getBoundary()}`;
     return this._client.post(`v1/projects/${projectId}/scripts`, opt)
       .catch((err) => {
-        throw new Error(`uploading script failed: ${err.message}`);
+        that.logger.error(`uploading script failed: ${err.message}`);
+        throw err;
       });
   }
 
   async addTestScript(projectId, testId, json) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = json;
     return this._client.post(`v1/projects/${projectId}/load-tests/${testId}/scripts`, opt)
       .catch((err) => {
-        throw new Error(`adding test script failed: ${err.message}`);
+        that.logger.error(`adding test script failed: ${err.message}`);
+        throw err;
       });
   }
 
   async updateTestScript(projectId, testId, json) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = [json];
     return this._client.put(`v1/projects/${projectId}/load-tests/${testId}/scripts`, opt)
       .catch((err) => {
-        throw new Error(`updating test script failed: ${err.message}`);
+        that.logger.error(`updating test script failed: ${err.message}`);
+        throw err;
       });
   }
 
   async getTestDistributionLocations(projectId, testId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/projects/${projectId}/load-tests/${testId}/locations`, opt)
       .catch((err) => {
-        throw new Error(`getting test locations failed: ${err.message}`);
+        that.logger.error(`getting test locations failed: ${err.message}`);
+        throw err;
       });
   }
 
   async updateTestDistributionLocation(projectId, testId, locationId, json) {
+    const that = this;
     const opt = this.getDefaultOptions();
     opt.json = json;
     return this._client.put(`v1/projects/${projectId}/load-tests/${testId}/locations/${locationId}`, opt)
       .catch((err) => {
-        throw new Error(`updating test script location failed: ${err.message}`);
+        that.logger.error(`updating test script location failed: ${err.message}`);
+        throw err;
       });
   }
 
   async getLoadGenerators(projectId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/projects/${projectId}/load-generators`, opt)
       .catch((err) => {
-        throw new Error(`getting load generators failed: ${err.message}`);
+        that.logger.error(`getting load generators failed: ${err.message}`);
+        throw err;
       });
   }
 
   async assignLgToTest(projectId, testId, loadGeneratorId) {
+    const that = this;
     const opt = this.getDefaultOptions();
     return this._client.put(`v1/projects/${projectId}/load-tests/${testId}/load-generators/${loadGeneratorId}`, opt)
       .catch((err) => {
-        throw new Error(`assigning load generator to test failed: ${err.message}`);
+        that.logger.error(`assigning load generator to test failed: ${err.message}`);
+        throw err;
       });
   }
 
@@ -268,11 +281,9 @@ class Client {
     const opt = this.getDefaultOptions();
     opt.json = { reportType };
     return this._client.post(`v1/test-runs/${runId}/reports`, opt)
-      .catch(async (err) => {
-        if (await that.checkAndRetryAuthClient(err)) {
-          return that.createTestRunReport(runId, reportType);
-        }
-        throw new Error(`creating run report failed: ${err.message}`);
+      .catch((err) => {
+        that.logger.error(`creating run report failed: ${err.message}`);
+        throw err;
       });
   }
 
@@ -293,9 +304,14 @@ class Client {
           reject(new Error('Download time exceeds 10 minutes'));
         }, MAX_DOWNLOAD_TIME);
 
+        let transferredNums = [];
         downloadStream
           .on('downloadProgress', ({ transferred }) => {
-            that.logger.info(`downloading report ...... ${transferred} (bytes)`);
+            transferredNums.push(transferred);
+            if (transferredNums.length > 5) {
+              that.logger.info(`downloading report ...... ${transferred} (bytes)`);
+              transferredNums = [];
+            }
           })
           .on('error', (error) => {
             that.logger.error(`downloading failed: ${error.message}`);
@@ -333,10 +349,8 @@ class Client {
       }
       return null;
     })
-      .catch(async (err) => {
-        if (await that.checkAndRetryAuthClient(err)) {
-          return that.downloadTestRunReport(fileName, reportId);
-        }
+      .catch((err) => {
+        that.logger.error(`download report failed: ${err.message}`);
         throw err;
       });
   }
@@ -345,11 +359,9 @@ class Client {
     const that = this;
     const opt = this.getDefaultOptions();
     return this._client.get(`v1/test-runs/reports/${reportId}`, opt)
-      .catch(async (err) => {
-        if (await that.checkAndRetryAuthClient(err)) {
-          return that.checkTestRunReport(reportId);
-        }
-        throw new Error(`checking run report failed: ${err.message}`);
+      .catch((err) => {
+        that.logger.error(`checking run report failed: ${err.message}`);
+        throw err;
       });
   }
 

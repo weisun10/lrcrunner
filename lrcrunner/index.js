@@ -21,6 +21,7 @@ const Client = require('./lib/Client');
 
 const RUN_POLLING_INTERVAL = 20 * 1000;
 const REPORT_POLLING_INTERVAL = 20 * 1000;
+const MAX_RETRIES_COUNT = 3;
 
 program.version('1.0.0', '-v, --version', 'print version');
 program.description('test executor for LoadRunner Cloud')
@@ -33,22 +34,53 @@ program.parse(process.argv);
 const options = program.opts();
 const logger = console;
 
-const createAndDownloadReport = async (
-  runId, downloadReport, reportType, currStatus, client, artifacts_folder, name,
-) => {
+const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder, name) => {
   const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
-  if (downloadReport && reportType && _.includes(hasReportUIStatus, currStatus.detailedStatus)) {
-    const runResult = await client.getTestRun(runId);
-    if (runResult.isTerminated) {
-      logger.info(`preparing report (${reportType}) ...`);
-      const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
-      const report = await client.createTestRunReport(runId, reportType);
-      if (_.isSafeInteger(_.get(report, 'reportId'))) {
-        return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+  let isNeedReLogin = false;
+  let isNeedRetry = false;
+  let retriesCount = 0;
+  do {
+    try {
+      if (client.credentials && isNeedReLogin) {
+        // eslint-disable-next-line no-await-in-loop
+        await client.authClient(client.credentials);
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const currStatus = await client.getTestRunStatusPolling(runId, RUN_POLLING_INTERVAL);
+      if (!downloadReport || !reportType) {
+        return null;
+      }
+      if (_.includes(hasReportUIStatus, currStatus.detailedStatus)) {
+        // eslint-disable-next-line no-await-in-loop
+        const runResult = await client.getTestRun(runId);
+        if (runResult.isTerminated) {
+          logger.info(`preparing report (${reportType}) ...`);
+          const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
+          // eslint-disable-next-line no-await-in-loop
+          const report = await client.createTestRunReport(runId, reportType);
+          if (_.isSafeInteger(_.get(report, 'reportId'))) {
+            return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+          }
+        }
+      }
+      return logger.info('report is not available');
+    } catch (err) {
+      if (err.statusCode === 401) {
+        if (retriesCount <= MAX_RETRIES_COUNT) {
+          isNeedReLogin = true;
+          isNeedRetry = true;
+          retriesCount += 1;
+        } else {
+          isNeedReLogin = false;
+          isNeedRetry = false;
+          retriesCount = 0;
+        }
+      } else {
+        throw err;
       }
     }
-  }
-  return logger.info('report is not available');
+  } while (isNeedRetry);
+  return null;
 };
 
 Promise.resolve().then(async () => {
@@ -180,8 +212,7 @@ Promise.resolve().then(async () => {
       logger.info(`running test "${test.name}" ...`);
       const run = await client.runTest(projectId, testId);
       logger.info(`run id: ${run.runId}`);
-      const currStatus = await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
-      await createAndDownloadReport(run.runId, downloadReport, reportType, currStatus, client, artifacts_folder, name);
+      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder, name);
     } else {
       logger.error(`test ${testId} does not exist in project ${projectId}`);
     }
@@ -266,8 +297,7 @@ Promise.resolve().then(async () => {
         logger.info('"detach" flag is enabled. exit');
         return;
       }
-      const currStatus = await client.getTestRunStatusPolling(run.runId, RUN_POLLING_INTERVAL);
-      await createAndDownloadReport(run.runId, downloadReport, reportType, currStatus, client, artifacts_folder, name);
+      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder, name);
     } else {
       logger.info('"runTest" flag is not enabled. exit');
     }
