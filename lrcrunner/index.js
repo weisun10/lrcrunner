@@ -50,31 +50,35 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       if (!downloadReport || !reportType) {
         return null;
       }
-      if (_.includes(hasReportUIStatus, currStatus.detailedStatus)) {
+      // eslint-disable-next-line no-await-in-loop
+      const isTerminated = _.get(await client.getTestRun(runId), 'isTerminated');
+      const isHasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
+      if (isHasReport) {
+        logger.info(`preparing report (${reportType}) ...`);
+        const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
         // eslint-disable-next-line no-await-in-loop
-        const runResult = await client.getTestRun(runId);
-        if (runResult.isTerminated) {
-          logger.info(`preparing report (${reportType}) ...`);
-          const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
+        const report = await client.createTestRunReport(runId, reportType);
+        if (_.isSafeInteger(_.get(report, 'reportId'))) {
           // eslint-disable-next-line no-await-in-loop
-          const report = await client.createTestRunReport(runId, reportType);
-          if (_.isSafeInteger(_.get(report, 'reportId'))) {
-            return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-          }
-        }
-      }
-      return logger.info('report is not available');
-    } catch (err) {
-      if (err.statusCode === 401) {
-        if (retriesCount <= MAX_RETRIES_COUNT) {
-          isNeedReLogin = true;
-          isNeedRetry = true;
-          retriesCount += 1;
+          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
         } else {
-          isNeedReLogin = false;
-          isNeedRetry = false;
-          retriesCount = 0;
+          logger.info('report is not available');
         }
+      } else {
+        const currErr = new Error('report is not available, retry');
+        currErr.statusCode = 409;
+        throw currErr;
+      }
+      isNeedRetry = false;
+    } catch (err) {
+      logger.info(err.message);
+      if (retriesCount <= MAX_RETRIES_COUNT && err.statusCode === 401) {
+        isNeedReLogin = true;
+        isNeedRetry = true;
+        retriesCount += 1;
+      } else if (retriesCount <= MAX_RETRIES_COUNT && err.statusCode === 409) {
+        isNeedRetry = true;
+        retriesCount += 1;
       } else {
         throw err;
       }
@@ -298,6 +302,7 @@ Promise.resolve().then(async () => {
         return;
       }
       await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder, name);
+      logger.info('done---');
     } else {
       logger.info('"runTest" flag is not enabled. exit');
     }

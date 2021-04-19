@@ -292,24 +292,18 @@ class Client {
 
     const opt = this.getDefaultOptions();
     opt.isStream = true;
-    return new Promise((resolve, reject) => {
-      let isNotReturn = false;
+    const downloadStream = got(`v1/test-runs/reports/${reportId}`, opt);
+    const fileWriterStream = fs.createWriteStream(fileName);
+
+    const downloadPromise = () => new Promise((resolve, reject) => {
+      let isNotReturn = true;
       try {
-        const downloadStream = got(`v1/test-runs/reports/${reportId}`, opt);
-        const fileWriterStream = fs.createWriteStream(fileName);
-
-        setTimeout(() => {
-          downloadStream.destroy();
-          fileWriterStream.destroy();
-          reject(new Error('Download time exceeds 10 minutes'));
-        }, MAX_DOWNLOAD_TIME);
-
         let transferredNums = [];
         downloadStream
           .on('downloadProgress', ({ transferred }) => {
             transferredNums.push(transferred);
-            if (transferredNums.length > 5) {
-              that.logger.info(`downloading report ...... ${transferred} (bytes)`);
+            if (transferredNums.length > 10) {
+              that.logger.info(`downloading report ...... ${transferredNums[0]} (bytes)`);
               transferredNums = [];
             }
           })
@@ -353,6 +347,21 @@ class Client {
         that.logger.error(`download report failed: ${err.message}`);
         throw err;
       });
+
+    let timeOut = null;
+    return Promise.race([
+      downloadPromise(),
+      new Promise((resolve, reject) => {
+        timeOut = setTimeout(() => {
+          downloadStream.destroy();
+          fileWriterStream.destroy();
+          return reject(new Error('Download time exceeds 10 minutes'));
+        }, MAX_DOWNLOAD_TIME);
+      }),
+    ]).then(() => {
+      clearTimeout(timeOut);
+      timeOut = null;
+    });
   }
 
   async checkTestRunReport(reportId) {
