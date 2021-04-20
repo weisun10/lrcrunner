@@ -1,4 +1,4 @@
-/*
+﻿/*
  * #© Copyright 2021 - Micro Focus or one of its affiliates
  * #
  * # The only warranties for products and services of Micro Focus and its affiliates and licensors (“Micro Focus”)
@@ -17,6 +17,7 @@ const tunnel = require('tunnel');
 const FormData = require('form-data');
 
 const MAX_DOWNLOAD_TIME = 10 * 60000;
+const MAX_RUN_INITIALIZING_TIME = 10 * 60000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -145,12 +146,35 @@ class Client {
 
   async getTestRunStatusPolling(runId, time = 5000) {
     const that = this;
+    let isStartedInitRun = false;
     async function polling() {
       const currStatus = await that.getTestRunStatus(runId);
-      that.logger.info(currStatus.detailedStatus);
 
       if (currStatus.status === 'in-progress') {
+        that.logger.info(currStatus.detailedStatus);
         await wait(time);
+
+        let timeOut = null;
+        if (currStatus.detailedStatus === 'INITIALIZING') {
+          if (!isStartedInitRun) {
+            isStartedInitRun = true;
+            return Promise.race([
+              polling(),
+              new Promise((resolve, reject) => {
+                timeOut = setTimeout(() => reject(new Error('test run "INITIALIZING" time exceeds 10 minutes')), MAX_RUN_INITIALIZING_TIME);
+              }),
+            ]).then((result) => {
+              clearTimeout(timeOut);
+              timeOut = null;
+              return result;
+            });
+          }
+        } else {
+          isStartedInitRun = false;
+          clearTimeout(timeOut);
+          timeOut = null;
+        }
+
         return polling();
       }
       return currStatus;
@@ -303,7 +327,7 @@ class Client {
           .on('downloadProgress', ({ transferred }) => {
             transferredNums.push(transferred);
             if (transferredNums.length > 10) {
-              that.logger.info(`downloading report ...... ${transferredNums[0]} (bytes)`);
+              that.logger.info(`downloading report ...... ${transferred} (bytes)`);
               transferredNums = [];
             }
           })

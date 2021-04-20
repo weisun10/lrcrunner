@@ -34,7 +34,7 @@ program.parse(process.argv);
 const options = program.opts();
 const logger = console;
 
-const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder, name) => {
+const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder) => {
   const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
   let isNeedReLogin = false;
   let isNeedRetry = false;
@@ -54,8 +54,9 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       const isTerminated = _.get(await client.getTestRun(runId), 'isTerminated');
       const isHasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
       if (isHasReport) {
+        logger.info(currStatus.detailedStatus);
         logger.info(`preparing report (${reportType}) ...`);
-        const resultPath = path.join(artifacts_folder, `./results (run #${runId} of ${name}).${reportType}`);
+        const resultPath = path.join(artifacts_folder, `./results_run_#${runId}.${reportType}`);
         // eslint-disable-next-line no-await-in-loop
         const report = await client.createTestRunReport(runId, reportType);
         if (_.isSafeInteger(_.get(report, 'reportId'))) {
@@ -65,6 +66,9 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
           logger.info('report is not available');
         }
       } else {
+        if (retriesCount >= MAX_RETRIES_COUNT) {
+          logger.info(currStatus.detailedStatus);
+        }
         const currErr = new Error('report is not available, retry');
         currErr.statusCode = 409;
         throw currErr;
@@ -72,11 +76,11 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       isNeedRetry = false;
     } catch (err) {
       logger.info(err.message);
-      if (retriesCount <= MAX_RETRIES_COUNT && err.statusCode === 401) {
+      if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
         isNeedReLogin = true;
         isNeedRetry = true;
         retriesCount += 1;
-      } else if (retriesCount <= MAX_RETRIES_COUNT && err.statusCode === 409) {
+      } else if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 409) {
         isNeedRetry = true;
         retriesCount += 1;
       } else {
@@ -216,7 +220,7 @@ Promise.resolve().then(async () => {
       logger.info(`running test "${test.name}" ...`);
       const run = await client.runTest(projectId, testId);
       logger.info(`run id: ${run.runId}`);
-      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder, name);
+      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder);
     } else {
       logger.error(`test ${testId} does not exist in project ${projectId}`);
     }
@@ -301,8 +305,7 @@ Promise.resolve().then(async () => {
         logger.info('"detach" flag is enabled. exit');
         return;
       }
-      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder, name);
-      logger.info('done---');
+      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder);
     } else {
       logger.info('"runTest" flag is not enabled. exit');
     }
