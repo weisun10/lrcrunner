@@ -151,7 +151,12 @@ class Client {
       const currStatus = await that.getTestRunStatus(runId);
 
       if (currStatus.status === 'in-progress') {
-        that.logger.info(currStatus.detailedStatus);
+        if (currStatus.detailedStatus === 'RUNNING') {
+          that.logger.info(`RUNNING - Running Vusers: ${currStatus.runningVusers} | Passed Transactions: ${currStatus.passedTrx} | Elapsed Time: ${currStatus.elapsedTime} (millisecond) | Errors: ${currStatus.errors}`);
+        } else {
+          that.logger.info(currStatus.detailedStatus);
+        }
+
         await wait(time);
 
         let timeOut = null;
