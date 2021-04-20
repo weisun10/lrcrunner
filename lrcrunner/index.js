@@ -21,7 +21,7 @@ const { program } = require('commander');
 const Client = require('./lib/Client');
 
 const RUN_POLLING_INTERVAL = 20 * 1000;
-const REPORT_POLLING_INTERVAL = 20 * 1000;
+const REPORT_POLLING_INTERVAL = 15 * 1000;
 const MAX_RETRIES_COUNT = 3;
 
 program.version('1.0.0', '-v, --version', 'print version');
@@ -69,7 +69,7 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
         return null;
       }
       logger.info(`preparing report (${reportType}) ...`);
-      const resultPath = path.join(artifacts_folder, `./results_run_#${runId}.${reportType}`);
+      const resultPath = path.join(artifacts_folder, `./results_run_${runId}.${reportType}`);
       // eslint-disable-next-line no-await-in-loop
       const report = await client.createTestRunReport(runId, reportType);
       if (_.isSafeInteger(_.get(report, 'reportId'))) {
@@ -195,7 +195,6 @@ Promise.resolve().then(async () => {
     detach,
     downloadReport,
     settings,
-    reportType,
   } = testOpts;
 
   if (!testId && _.isEmpty(name)) {
@@ -206,6 +205,11 @@ Promise.resolve().then(async () => {
     if (!_.isInteger(testId) || testId < 1) {
       throw new Error('invalid testId');
     }
+  }
+
+  let { reportType } = testOpts;
+  if (_.isEmpty(reportType)) {
+    reportType = 'pdf';
   }
 
   const client = new Client(lrcCfg.tenant, lrcURLObject, proxy, logger);

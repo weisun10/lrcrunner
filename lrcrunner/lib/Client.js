@@ -1,4 +1,4 @@
-﻿/*
+/*
  * #© Copyright 2021 - Micro Focus or one of its affiliates
  * #
  * # The only warranties for products and services of Micro Focus and its affiliates and licensors (“Micro Focus”)
@@ -22,6 +22,10 @@ const MAX_RUN_INITIALIZING_TIME = 10 * 60000;
 const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function getRunStatisticString(data) {
+  return `Running Vusers: ${data.runningVusers}, Passed TX: ${data.passedTrx}, Passed TX: ${data.failedTrx}, TX per second: ${data.TrxPerSec || data.trxPerSec}, Hits per second: ${data.hitsPerSec}`;
+}
 
 class Client {
   constructor(tenant, url, proxy, logger) {
@@ -153,8 +157,8 @@ class Client {
       const currStatus = await that.getTestRunStatus(runId);
 
       if (currStatus.status === 'in-progress') {
-        if (currStatus.detailedStatus === 'RUNNING') {
-          that.logger.info(`RUNNING - Running Vusers: ${currStatus.runningVusers} | Passed Transactions: ${currStatus.passedTrx} | Elapsed Time: ${currStatus.elapsedTime} (millisecond) | Errors: ${currStatus.errors}`);
+        if ((currStatus.detailedStatus === 'RUNNING') && (currStatus.runningVusers !== 0)) {
+          that.logger.info(`RUNNING - ${getRunStatisticString(currStatus)}`);
         } else {
           that.logger.info(currStatus.detailedStatus);
         }
