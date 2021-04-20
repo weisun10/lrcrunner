@@ -13,11 +13,13 @@ const { URL, URLSearchParams } = require('url');
 const fs = require('fs-extra');
 const path = require('path');
 const got = require('got');
+const _ = require('lodash');
 const tunnel = require('tunnel');
 const FormData = require('form-data');
 
 const MAX_DOWNLOAD_TIME = 10 * 60000;
 const MAX_RUN_INITIALIZING_TIME = 10 * 60000;
+const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -182,6 +184,13 @@ class Client {
 
         return polling();
       }
+      const isTerminated = _.get(await that.getTestRun(runId), 'isTerminated');
+      const hasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
+      if (!hasReport) {
+        return polling();
+      }
+
+      that.logger.info(currStatus.detailedStatus);
       return currStatus;
     }
 

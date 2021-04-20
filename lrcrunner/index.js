@@ -15,6 +15,7 @@ const yaml = require('js-yaml');
 const fs = require('fs-extra');
 const path = require('path');
 const _ = require('lodash');
+const winston = require('winston');
 const { URL } = require('url');
 const { program } = require('commander');
 const Client = require('./lib/Client');
@@ -32,10 +33,27 @@ program.description('test executor for LoadRunner Cloud')
 program.parse(process.argv);
 
 const options = program.opts();
-const logger = console;
+
+const createLogger = () => {
+  const {
+    combine, timestamp, printf,
+  } = winston.format;
+
+  return winston.createLogger({
+    format: combine(
+      timestamp(),
+      printf(({
+        // eslint-disable-next-line no-shadow
+        level, message, timestamp,
+      }) => `${timestamp} - ${level}: ${message}`),
+    ),
+    transports: [new winston.transports.Console()],
+  });
+};
+
+const logger = createLogger();
 
 const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder) => {
-  const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
   let isNeedReLogin = false;
   let isNeedRetry = false;
   let retriesCount = 0;
@@ -46,41 +64,25 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
         await client.authClient(client.credentials);
       }
       // eslint-disable-next-line no-await-in-loop
-      const currStatus = await client.getTestRunStatusPolling(runId, RUN_POLLING_INTERVAL);
+      await client.getTestRunStatusPolling(runId, RUN_POLLING_INTERVAL);
       if (!downloadReport || !reportType) {
         return null;
       }
+      logger.info(`preparing report (${reportType}) ...`);
+      const resultPath = path.join(artifacts_folder, `./results_run_#${runId}.${reportType}`);
       // eslint-disable-next-line no-await-in-loop
-      const isTerminated = _.get(await client.getTestRun(runId), 'isTerminated');
-      const isHasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
-      if (isHasReport) {
-        logger.info(currStatus.detailedStatus);
-        logger.info(`preparing report (${reportType}) ...`);
-        const resultPath = path.join(artifacts_folder, `./results_run_#${runId}.${reportType}`);
+      const report = await client.createTestRunReport(runId, reportType);
+      if (_.isSafeInteger(_.get(report, 'reportId'))) {
         // eslint-disable-next-line no-await-in-loop
-        const report = await client.createTestRunReport(runId, reportType);
-        if (_.isSafeInteger(_.get(report, 'reportId'))) {
-          // eslint-disable-next-line no-await-in-loop
-          await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-        } else {
-          logger.info('report is not available');
-        }
+        await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
       } else {
-        if (retriesCount >= MAX_RETRIES_COUNT) {
-          logger.info(currStatus.detailedStatus);
-        }
-        const currErr = new Error('report is not available, retry');
-        currErr.statusCode = 409;
-        throw currErr;
+        logger.info('report is not available');
       }
       isNeedRetry = false;
     } catch (err) {
       logger.info(err.message);
       if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
         isNeedReLogin = true;
-        isNeedRetry = true;
-        retriesCount += 1;
-      } else if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 409) {
         isNeedRetry = true;
         retriesCount += 1;
       } else {
