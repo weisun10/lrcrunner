@@ -24,7 +24,7 @@ const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function getRunStatisticString(data) {
-  return `Running Vusers: ${data.runningVusers}, Passed TX: ${data.passedTrx}, Failed TX: ${data.failedTrx}, TX per second: ${data.TrxPerSec || data.trxPerSec}, Hits per second: ${data.hitsPerSec}`;
+  return `Vusers: ${data.runningVusers}, Passed TX: ${data.passedTrx}, Failed TX: ${data.failedTrx}, TPS: ${data.TrxPerSec || data.trxPerSec}, Hits/s: ${data.hitsPerSec}`;
 }
 
 class Client {

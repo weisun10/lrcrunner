@@ -93,6 +93,13 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
   return null;
 };
 
+function getDashboardUrl(url, tenant, runId) {
+  const dashboardUrl = new URL(url);
+  dashboardUrl.searchParams.append('TENANTID', tenant);
+  dashboardUrl.pathname = `/run-overview/${runId}/dashboard/`;
+  return dashboardUrl.toString();
+}
+
 Promise.resolve().then(async () => {
   const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
 
@@ -225,7 +232,7 @@ Promise.resolve().then(async () => {
     if (test && test.id === testId) {
       logger.info(`running test "${test.name}" ...`);
       const run = await client.runTest(projectId, testId);
-      logger.info(`run id: ${run.runId}`);
+      logger.info(`run id: ${run.runId}, url: ${getDashboardUrl(lrcUrl, lrcCfg.tenant, run.runId)}`);
       await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder);
     } else {
       logger.error(`test ${testId} does not exist in project ${projectId}`);
@@ -306,7 +313,7 @@ Promise.resolve().then(async () => {
     if (runTest) {
       logger.info(`running test ${newTest.name} ...`);
       const run = await client.runTest(projectId, newTest.id);
-      logger.info(`run id: ${run.runId}`);
+      logger.info(`run id: ${run.runId}, url: ${getDashboardUrl(lrcUrl, lrcCfg.tenant, run.runId)}`);
       if (detach) {
         logger.info('"detach" flag is enabled. exit');
         return;
