@@ -80,7 +80,6 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       }
       needRetry = false;
     } catch (err) {
-      logger.info(err.message);
       if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
         needReLogin = true;
         needRetry = true;
@@ -324,6 +323,6 @@ Promise.resolve().then(async () => {
     }
   }
 }).catch((err) => {
-  logger.error(err.toString());
+  logger.error(err.message);
   process.exit(1);
 });
