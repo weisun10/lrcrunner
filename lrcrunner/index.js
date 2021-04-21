@@ -99,6 +99,14 @@ function getDashboardUrl(url, tenant, runId) {
   return dashboardUrl.toString();
 }
 
+function validateReportType(reportType) {
+  const TYPES = ['pdf', 'docx', 'csv'];
+  if (_.isArray(reportType)) {
+    return _.every(reportType, (type) => TYPES.includes(type));
+  }
+  return TYPES.includes(reportType);
+}
+
 Promise.resolve().then(async () => {
   const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
 
@@ -216,6 +224,14 @@ Promise.resolve().then(async () => {
   let { reportType } = testOpts;
   if (_.isEmpty(reportType)) {
     reportType = 'pdf';
+  }
+
+  if (_.isArray(reportType)) {
+    reportType = _.uniq(reportType);
+  }
+
+  if (!validateReportType(reportType)) {
+    throw new Error('invalid reportType');
   }
 
   const client = new Client(lrcCfg.tenant, lrcURLObject, proxy, logger);
