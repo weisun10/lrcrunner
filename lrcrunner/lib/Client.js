@@ -172,16 +172,21 @@ class Client {
             return Promise.race([
               polling(),
               new Promise((resolve, reject) => {
-                timeOut = setTimeout(() => reject(new Error('test run "INITIALIZING" time exceeds 10 minutes')), MAX_RUN_INITIALIZING_TIME);
+                timeOut = setTimeout(() => reject(
+                  new Error('test run "INITIALIZING" time exceeds 10 minutes'),
+                ), MAX_RUN_INITIALIZING_TIME);
               }),
             ]).then((result) => {
               clearTimeout(timeOut);
               timeOut = null;
               return result;
+            }).catch((err) => {
+              clearTimeout(timeOut);
+              timeOut = null;
+              throw err;
             });
           }
         } else {
-          isStartedInitRun = false;
           clearTimeout(timeOut);
           timeOut = null;
         }
