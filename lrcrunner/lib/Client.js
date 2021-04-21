@@ -349,12 +349,16 @@ class Client {
         downloadStream
           .on('downloadProgress', ({ transferred }) => {
             transferredNums.push(transferred);
-            if (transferredNums.length > 10) {
+            if (transferredNums.length > 15) {
               that.logger.info(`downloading report ...... ${transferred} (bytes)`);
               transferredNums = [];
             }
-          })
-          .on('error', (error) => {
+          }).on('end', () => {
+            if (transferredNums.length > 0) {
+              that.logger.info(`downloading report ...... ${_.last(transferredNums)} (bytes)`);
+              transferredNums = [];
+            }
+          }).on('error', (error) => {
             that.logger.error(`downloading failed: ${error.message}`);
             if (isNotReturn) {
               isNotReturn = false;
@@ -373,7 +377,7 @@ class Client {
             return null;
           })
           .on('finish', () => {
-            that.logger.info(`downloaded to ${fileName}`);
+            that.logger.info(`Report saved to ${fileName}`);
             if (isNotReturn) {
               isNotReturn = false;
               return resolve();
