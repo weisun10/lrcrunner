@@ -266,11 +266,16 @@ Promise.resolve().then(async () => {
 
     // eslint-disable-next-line no-restricted-syntax
     for await (const script of scripts) {
-      logger.info(`uploading script: ${script.path} ...`);
-      const newScript = await client.uploadScript(projectId, script.path);
-      logger.info(`uploaded script. id: ${newScript.id}`);
-      const testScript = await client.addTestScript(projectId, newTest.id, { scriptId: newScript.id });
-      logger.info('added script into test');
+      let scriptId = script.id;
+      if (!scriptId) {
+        logger.info(`uploading script: ${script.path} ...`);
+        const newScript = await client.uploadScript(projectId, script.path);
+        logger.info(`uploaded script. id: ${newScript.id}`);
+        scriptId = newScript.id;
+      }
+
+      const testScript = await client.addTestScript(projectId, newTest.id, { scriptId });
+      logger.info(`added script ${scriptId} into test`);
       testScript.loadTestScriptId = testScript.id;
       await client.updateTestScript(projectId, newTest.id, _.merge(testScript, script));
       logger.info('updated test script settings');
