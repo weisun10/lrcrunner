@@ -54,12 +54,12 @@ const createLogger = () => {
 const logger = createLogger();
 
 const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder) => {
-  let isNeedReLogin = false;
-  let isNeedRetry = false;
+  let needReLogin = false;
+  let needRetry = false;
   let retriesCount = 0;
   do {
     try {
-      if (client.credentials && isNeedReLogin) {
+      if (client.credentials && needReLogin) {
         // eslint-disable-next-line no-await-in-loop
         await client.authClient(client.credentials);
       }
@@ -78,18 +78,18 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       } else {
         logger.info('report is not available');
       }
-      isNeedRetry = false;
+      needRetry = false;
     } catch (err) {
       logger.info(err.message);
       if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
-        isNeedReLogin = true;
-        isNeedRetry = true;
+        needReLogin = true;
+        needRetry = true;
         retriesCount += 1;
       } else {
         throw err;
       }
     }
-  } while (isNeedRetry);
+  } while (needRetry);
   return null;
 };
 
