@@ -22,6 +22,7 @@ program.version('1.0.0', '-v, --version', 'print version');
 program.description('test executor for LoadRunner Cloud')
   .option('-r, --run [config file]', 'run with specified configuration file', '')
   .option('-u, --url [url]', 'LRC url')
+  .option('-a, --artifacts [folder]', 'artifacts folder')
   .option('-i, --client_id [client id]', 'LRC client id')
   .option('-s, --client_secret [client secret]', 'LRC client secret');
 program.parse(process.argv);
@@ -32,10 +33,10 @@ const run = async () => {
   const options = program.opts();
 
   // load env
-  const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
+  const isLocalTesting = utils.isOptionEnabled(process.env.LRC_LOCAL_TESTING);
   const client_id = options.client_id || process.env.LRC_CLIENT_ID;
   const client_secret = options.client_secret || process.env.LRC_CLIENT_SECRET;
-  const artifacts_folder = path.resolve(process.env.LRC_ARTIFACTS_FOLDER || './results');
+  const artifacts_folder = options.artifacts || path.resolve(process.env.LRC_ARTIFACTS_FOLDER || './results');
 
   if (!isLocalTesting && (_.isEmpty(client_id) || _.isEmpty(client_secret))) {
     throw new Error('API access keys are missing');
@@ -119,7 +120,7 @@ const run = async () => {
       const currLocation = _.find(testLocations, { name: locationName });
       if (currLocation) {
         await client.updateTestDistributionLocation(projectId, newTest.id, currLocation.id, { vusersPercent });
-        logger.info(`updated vuser distributions (${locationName}) - ${vusersPercent}`);
+        logger.info(`updated vuser distribution: ${locationName} - ${vusersPercent}`);
       } else {
         throw new Error(`location "${locationName}" does not exist`);
       }

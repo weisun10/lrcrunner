@@ -150,6 +150,15 @@ const utils = {
     };
   },
 
+  isOptionEnabled: (option) => {
+    if (!option) {
+      return false;
+    }
+
+    const trueValues = ['true', 'yes', 'y', '1', 'enabled'];
+    return trueValues.includes(option.toString().toLowerCase());
+  },
+
   getDashboardUrl: (url, tenant, runId) => {
     const dashboardUrl = new URL(url);
     dashboardUrl.searchParams.append('TENANTID', tenant);
