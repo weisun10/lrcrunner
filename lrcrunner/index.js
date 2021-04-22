@@ -69,7 +69,7 @@ const run = async () => {
 
     logger.info(`test id: ${testId}`);
     const test = await client.getTest(projectId, testId);
-    logger.info(`running test "${test.name}" ...`);
+    logger.info(`running test: "${test.name}" ...`);
 
     // run test
     const currRun = await client.runTest(projectId, testId);
@@ -126,7 +126,7 @@ const run = async () => {
       }
     }
 
-    // loadGenerators
+    // load generators
     const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
     // eslint-disable-next-line no-restricted-syntax
     for await (const lgKey of loadGenerators) {
@@ -144,7 +144,7 @@ const run = async () => {
       logger.info('"runTest" flag is not enabled. exit');
       return;
     }
-    logger.info(`running test ${newTest.name} ...`);
+    logger.info(`running test: ${newTest.name} ...`);
     const currRun = await client.runTest(projectId, newTest.id);
     logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, lrcCfg.tenant, currRun.runId)}`);
     if (detach) {

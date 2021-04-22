@@ -99,7 +99,7 @@ const utils = {
     logger.info(`project id: ${projectId}`);
 
     const {
-      testId, name, script, runTest = false, detach = false, downloadReport = true,
+      testId, name, script, runTest = true, detach = false, downloadReport = true,
       settings = {}, distributions = [], loadGenerators = [],
     } = testOpts;
 
@@ -113,11 +113,12 @@ const utils = {
       }
     }
 
-    let { reportType, reportTypes } = testOpts;
+    let { reportType } = testOpts;
     if (_.isEmpty(reportType)) {
       reportType = 'pdf';
     }
 
+    let reportTypes;
     if (_.isArray(reportType)) {
       reportTypes = _.uniq(reportType);
     } else {
