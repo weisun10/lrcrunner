@@ -153,6 +153,7 @@ class Client {
   async getTestRunStatusPolling(runId, time = 5000) {
     const that = this;
     let isStartedInitRun = false;
+    let retriesCount = 0;
     async function polling() {
       const currStatus = await that.getTestRunStatus(runId);
 
@@ -195,10 +196,10 @@ class Client {
       }
       const isTerminated = _.get(await that.getTestRun(runId), 'isTerminated');
       const hasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
-      if (!hasReport) {
+      if (!hasReport && retriesCount < 3) {
+        retriesCount += 1;
         return polling();
       }
-
       that.logger.info(currStatus.detailedStatus);
       return currStatus;
     }

@@ -68,16 +68,29 @@ const getRunStatusAndResultReport = async (runId, downloadReport, reportType, cl
       if (!downloadReport || !reportType) {
         return null;
       }
-      logger.info(`preparing report (${reportType}) ...`);
-      const resultPath = path.join(artifacts_folder, `./results_run_${runId}.${reportType}`);
-      // eslint-disable-next-line no-await-in-loop
-      const report = await client.createTestRunReport(runId, reportType);
-      if (_.isSafeInteger(_.get(report, 'reportId'))) {
+
+      const promise = async (reportTypeEle) => {
+        logger.info(`preparing report (${reportTypeEle}) ...`);
+        const resultPath = path.join(artifacts_folder, `./results_run_${runId}.${reportTypeEle}`);
         // eslint-disable-next-line no-await-in-loop
-        await client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+        const report = await client.createTestRunReport(runId, reportTypeEle);
+        if (_.isSafeInteger(_.get(report, 'reportId'))) {
+          // eslint-disable-next-line no-await-in-loop
+          return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+        }
+        return logger.info(`report (${reportTypeEle}) is not available`);
+      };
+      let reportPromise = Promise.resolve();
+      if (!_.isArray(reportType)) {
+        reportPromise = reportPromise.then(() => promise(reportType));
       } else {
-        logger.info('report is not available');
+        _.forEach(reportType, (type) => {
+          reportPromise = reportPromise.then(() => promise(type));
+        });
       }
+      // eslint-disable-next-line no-await-in-loop
+      await reportPromise;
+
       needRetry = false;
     } catch (err) {
       if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
