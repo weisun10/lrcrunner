@@ -11,18 +11,12 @@
  *
  */
 
-const yaml = require('js-yaml');
 const fs = require('fs-extra');
 const path = require('path');
 const _ = require('lodash');
-const winston = require('winston');
-const { URL } = require('url');
 const { program } = require('commander');
 const Client = require('./lib/Client');
-
-const RUN_POLLING_INTERVAL = 20 * 1000;
-const REPORT_POLLING_INTERVAL = 15 * 1000;
-const MAX_RETRIES_COUNT = 3;
+const utils = require('./lib/utils');
 
 program.version('1.0.0', '-v, --version', 'print version');
 program.description('test executor for LoadRunner Cloud')
@@ -32,250 +26,58 @@ program.description('test executor for LoadRunner Cloud')
   .option('-s, --client_secret [client secret]', 'LRC client secret');
 program.parse(process.argv);
 
-const options = program.opts();
+const logger = utils.createLogger();
 
-const createLogger = () => {
-  const {
-    combine, timestamp, printf,
-  } = winston.format;
+const run = async () => {
+  const options = program.opts();
 
-  return winston.createLogger({
-    format: combine(
-      timestamp(),
-      printf(({
-        // eslint-disable-next-line no-shadow
-        level, message, timestamp,
-      }) => `${timestamp} - ${level}: ${message}`),
-    ),
-    transports: [new winston.transports.Console()],
-  });
-};
-
-const logger = createLogger();
-
-const getRunStatusAndResultReport = async (runId, downloadReport, reportType, client, artifacts_folder) => {
-  let needReLogin = false;
-  let needRetry = false;
-  let retriesCount = 0;
-  do {
-    try {
-      if (client.credentials && needReLogin) {
-        // eslint-disable-next-line no-await-in-loop
-        await client.authClient(client.credentials);
-      }
-      // eslint-disable-next-line no-await-in-loop
-      await client.getTestRunStatusPolling(runId, RUN_POLLING_INTERVAL);
-      if (!downloadReport || !reportType) {
-        return null;
-      }
-
-      const promise = async (reportTypeEle) => {
-        logger.info(`preparing report (${reportTypeEle}) ...`);
-        const resultPath = path.join(artifacts_folder, `./results_run_${runId}.${reportTypeEle}`);
-        // eslint-disable-next-line no-await-in-loop
-        const report = await client.createTestRunReport(runId, reportTypeEle);
-        if (_.isSafeInteger(_.get(report, 'reportId'))) {
-          // eslint-disable-next-line no-await-in-loop
-          return client.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
-        }
-        return logger.info(`report (${reportTypeEle}) is not available`);
-      };
-      let reportPromise = Promise.resolve();
-      if (!_.isArray(reportType)) {
-        reportPromise = reportPromise.then(() => promise(reportType));
-      } else {
-        _.forEach(reportType, (type) => {
-          reportPromise = reportPromise.then(() => promise(type));
-        });
-      }
-      // eslint-disable-next-line no-await-in-loop
-      await reportPromise;
-
-      needRetry = false;
-    } catch (err) {
-      if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
-        needReLogin = true;
-        needRetry = true;
-        retriesCount += 1;
-      } else {
-        throw err;
-      }
-    }
-  } while (needRetry);
-  return null;
-};
-
-function getDashboardUrl(url, tenant, runId) {
-  const dashboardUrl = new URL(url);
-  dashboardUrl.searchParams.append('TENANTID', tenant);
-  dashboardUrl.pathname = `/run-overview/${runId}/dashboard/`;
-  return dashboardUrl.toString();
-}
-
-function validateReportType(reportType) {
-  const TYPES = ['pdf', 'docx', 'csv'];
-  if (_.isArray(reportType)) {
-    return _.every(reportType, (type) => TYPES.includes(type));
-  }
-  return TYPES.includes(reportType);
-}
-
-Promise.resolve().then(async () => {
+  // load env
   const isLocalTesting = !_.isEmpty(process.env.LRC_LOCAL_TESTING);
-
-  const configFile = options.run;
-  if (_.isEmpty(configFile)) {
-    throw new Error('configuration file is missing');
-  }
-
-  logger.info(`config file: ${configFile}`);
-
-  const configFileData = await fs.promises.readFile(configFile, 'utf8');
-  const config = yaml.load(configFileData);
-
-  // logger.info(`config data: ${JSON.stringify(config)}`);
-
-  if (_.isEmpty(config.modules) || _.isEmpty(config.modules.lrc)) {
-    throw new Error('invalid configuration file: lrc module is missing');
-  }
-
-  if (!_.isArray(config.execution) || (config.execution.length === 0) || (config.execution[0].executor !== 'lrc')) {
-    throw new Error('invalid configuration file: lrc executor is missing');
-  }
-
-  const scenarioName = config.execution[0].scenario;
-  if (_.isEmpty(scenarioName)) {
-    throw new Error('invalid configuration file: scenario is missing');
-  }
-
-  logger.info(`scenario name: ${scenarioName}`);
-
-  const testOpts = _.get(config, ['scenarios', scenarioName]);
-  if (!_.isObject(testOpts)) {
-    throw new Error(`no information for scenario: ${scenarioName}`);
-  }
-
   const client_id = options.client_id || process.env.LRC_CLIENT_ID;
   const client_secret = options.client_secret || process.env.LRC_CLIENT_SECRET;
-
-  if (!isLocalTesting) {
-    if (_.isEmpty(client_id) || _.isEmpty(client_secret)) {
-      throw new Error('API access keys are missing');
-    }
-  }
-
-  const lrcCfg = config.modules.lrc;
-
-  let lrcUrl = options.url || lrcCfg.url;
-  if (_.isEmpty(lrcUrl)) {
-    if (isLocalTesting) {
-      lrcUrl = 'http://127.0.0.1:3030';
-    } else {
-      lrcUrl = 'https://loadrunner-cloud.saas.microfocus.com';
-    }
-  }
-
-  let lrcURLObject;
-  try {
-    lrcURLObject = new URL(lrcUrl);
-
-    if (isLocalTesting) {
-      if (lrcURLObject.port === '3030') {
-        lrcURLObject.port = '3032';
-      }
-    }
-  } catch (ex) {
-    throw new Error('invalid LRC url');
-  }
-
-  if (_.isEmpty(lrcCfg.tenant) && !_.isInteger(lrcCfg.tenant)) {
-    throw new Error('tenant is missing');
-  }
-
   const artifacts_folder = path.resolve(process.env.LRC_ARTIFACTS_FOLDER || './results');
+
+  if (!isLocalTesting && (_.isEmpty(client_id) || _.isEmpty(client_secret))) {
+    throw new Error('API access keys are missing');
+  }
+
   logger.info(`artifacts folder: ${artifacts_folder}`);
   await fs.ensureDir(artifacts_folder);
 
-  let proxy;
-  if (config.settings && config.settings.proxy && _.isString(config.settings.proxy.address)) {
-    proxy = config.settings.proxy.address;
-    logger.info(`proxy: ${proxy}`);
-  }
-
-  logger.info(`LRC url: ${lrcUrl}, tenant: ${lrcCfg.tenant}, client id: ${client_id}`);
-
-  let { projectId } = testOpts;
-  if (!projectId) {
-    logger.info('project id is not specified, use default project 1');
-    projectId = 1;
-  }
-  if (!_.isInteger(projectId) || projectId < 1) {
-    throw new Error('invalid projectId');
-  }
-
-  logger.info(`project id: ${projectId}`);
-
+  // load config
   const {
-    testId,
-    name,
-    runTest,
-    detach,
-    downloadReport,
-    settings,
-  } = testOpts;
+    testOpts, lrcCfg, lrcURLObject, proxy,
+  } = await utils.loadAndCheckConfig(options, isLocalTesting, logger);
 
-  if (!testId && _.isEmpty(name)) {
-    throw new Error('test name is missing');
-  }
+  logger.info(`LRC url: ${lrcURLObject.href}, tenant: ${lrcCfg.tenant}, client id: ${client_id}`);
 
-  if (testId) {
-    if (!_.isInteger(testId) || testId < 1) {
-      throw new Error('invalid testId');
-    }
-  }
+  // load test options
+  const {
+    projectId, testId, scripts, name, runTest, detach, downloadReport,
+    settings, reportTypes, distributions, loadGenerators,
+  } = await utils.loadAndCheckTestOpts(testOpts, logger);
 
-  let { reportType } = testOpts;
-  if (_.isEmpty(reportType)) {
-    reportType = 'pdf';
-  }
-
-  if (_.isArray(reportType)) {
-    reportType = _.uniq(reportType);
-  }
-
-  if (!validateReportType(reportType)) {
-    throw new Error('invalid reportType');
-  }
-
+  // start main progress
   const client = new Client(lrcCfg.tenant, lrcURLObject, proxy, logger);
   if (!isLocalTesting) {
     await client.authClient({ client_id, client_secret });
   }
 
   if (testId) {
-    logger.info(`test id: ${testId}`);
-
     // process #1: run existing test
+
+    logger.info(`test id: ${testId}`);
     const test = await client.getTest(projectId, testId);
-    if (test && test.id === testId) {
-      logger.info(`running test "${test.name}" ...`);
-      const run = await client.runTest(projectId, testId);
-      logger.info(`run id: ${run.runId}, url: ${getDashboardUrl(lrcUrl, lrcCfg.tenant, run.runId)}`);
-      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder);
-    } else {
-      logger.error(`test ${testId} does not exist in project ${projectId}`);
-    }
+    logger.info(`running test "${test.name}" ...`);
+
+    // run test
+    const currRun = await client.runTest(projectId, testId);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, lrcCfg.tenant, currRun.runId)}`);
+
+    // run status and report
+    await client.getRunStatusAndResultReport(currRun.runId, downloadReport, reportTypes, artifacts_folder);
   } else {
     // process #2: create new test
-
-    let { scripts } = testOpts;
-    if (_.isEmpty(scripts)) {
-      scripts = testOpts.script;
-    }
-
-    if (!_.isArray(scripts) || scripts.length <= 0) {
-      throw new Error('script is required');
-    }
 
     // create test
     logger.info(`going to create test: ${name}`);
@@ -283,16 +85,15 @@ Promise.resolve().then(async () => {
     logger.info(`created test. id: ${newTest.id}, name: ${newTest.name}`);
 
     // test settings
-    if (settings) {
-      logger.info('retrieving test settings');
-      const newTestSettings = await client.getTestSettings(projectId, newTest.id);
+    logger.info('retrieving test settings');
+    const newTestSettings = await client.getTestSettings(projectId, newTest.id);
+    if (!_.isEmpty(settings)) {
       logger.info('updating test settings');
       await client.updateTestSettings(projectId, newTest.id, _.merge(newTestSettings, settings));
     }
 
     // test scripts
     logger.info('going to create scripts');
-
     // eslint-disable-next-line no-restricted-syntax
     for await (const script of scripts) {
       let scriptId = script.id;
@@ -310,53 +111,52 @@ Promise.resolve().then(async () => {
       logger.info('updated test script settings');
     }
 
-    let { distributions, loadGenerators } = testOpts || {};
     // vuser distributions
-    if (!_.every(scripts, (script) => script.locationType === 1)) { // 0: Cloud; 1: On-Premise
-      const testLocations = await client.getTestDistributionLocations(projectId, newTest.id);
-      distributions = distributions || [];
-      // eslint-disable-next-line no-restricted-syntax
-      for await (const distribution of distributions) {
-        const { locationName, vusersPercent } = distribution;
-        const currLocation = _.find(testLocations, { name: locationName });
-        if (currLocation) {
-          await client.updateTestDistributionLocation(projectId, newTest.id, currLocation.id, { vusersPercent });
-          logger.info(`updated vuser distributions (${locationName}) - ${vusersPercent}`);
-        } else {
-          throw new Error(`location "${locationName}" does not exist`);
-        }
+    const testLocations = await client.getTestDistributionLocations(projectId, newTest.id);
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const distribution of distributions) {
+      const { locationName, vusersPercent } = distribution;
+      const currLocation = _.find(testLocations, { name: locationName });
+      if (currLocation) {
+        await client.updateTestDistributionLocation(projectId, newTest.id, currLocation.id, { vusersPercent });
+        logger.info(`updated vuser distributions (${locationName}) - ${vusersPercent}`);
+      } else {
+        throw new Error(`location "${locationName}" does not exist`);
       }
     }
 
-    if (_.find(scripts, (script) => script.locationType === 1)) { // 0: Cloud; 1: On-Premise
-      const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
-      loadGenerators = loadGenerators || [];
-      // eslint-disable-next-line no-restricted-syntax
-      for await (const lgKey of loadGenerators) {
-        const currLg = _.find(projectLoadGenerators, (projectLg) => projectLg.key === lgKey);
-        if (currLg) {
-          await client.assignLgToTest(projectId, newTest.id, currLg.id);
-          logger.info(`assigned load generator "${lgKey}" to test`);
-        } else {
-          throw new Error(`load generator "${lgKey}" does not exist`);
-        }
+    // loadGenerators
+    const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const lgKey of loadGenerators) {
+      const currLg = _.find(projectLoadGenerators, (projectLg) => projectLg.key === lgKey);
+      if (currLg) {
+        await client.assignLgToTest(projectId, newTest.id, currLg.id);
+        logger.info(`assigned load generator "${lgKey}" to test`);
+      } else {
+        throw new Error(`load generator "${lgKey}" does not exist`);
       }
     }
 
-    if (runTest) {
-      logger.info(`running test ${newTest.name} ...`);
-      const run = await client.runTest(projectId, newTest.id);
-      logger.info(`run id: ${run.runId}, url: ${getDashboardUrl(lrcUrl, lrcCfg.tenant, run.runId)}`);
-      if (detach) {
-        logger.info('"detach" flag is enabled. exit');
-        return;
-      }
-      await getRunStatusAndResultReport(run.runId, downloadReport, reportType, client, artifacts_folder);
-    } else {
+    // run test
+    if (!runTest) {
       logger.info('"runTest" flag is not enabled. exit');
+      return;
     }
+    logger.info(`running test ${newTest.name} ...`);
+    const currRun = await client.runTest(projectId, newTest.id);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, lrcCfg.tenant, currRun.runId)}`);
+    if (detach) {
+      logger.info('"detach" flag is enabled. exit');
+      return;
+    }
+
+    // run status and report
+    await client.getRunStatusAndResultReport(currRun.runId, downloadReport, reportTypes, artifacts_folder);
   }
-}).catch((err) => {
+};
+
+run().catch((err) => {
   logger.error(err.message);
   process.exit(1);
 });

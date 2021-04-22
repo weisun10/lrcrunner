@@ -19,6 +19,10 @@ const FormData = require('form-data');
 
 const MAX_DOWNLOAD_TIME = 10 * 60000;
 const MAX_RUN_INITIALIZING_TIME = 10 * 60000;
+const MAX_RUN_CREATE_REPORT_TIME = 10 * 60000;
+const RUN_POLLING_INTERVAL = 20 * 1000;
+const REPORT_POLLING_INTERVAL = 15 * 1000;
+const MAX_RETRIES_COUNT = 3;
 const hasReportUIStatus = ['HALTED', 'FAILED', 'PASSED', 'STOPPED'];
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -196,7 +200,7 @@ class Client {
       }
       const isTerminated = _.get(await that.getTestRun(runId), 'isTerminated');
       const hasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
-      if (!hasReport && retriesCount < 3) {
+      if (!hasReport && retriesCount < MAX_RETRIES_COUNT) {
         retriesCount += 1;
         return polling();
       }
@@ -428,9 +432,31 @@ class Client {
 
   async getTestRunReportPolling(name, reportId, time = 5000) {
     const that = this;
+    let firstCheckReport = true;
+    let timeOut = null;
     async function polling() {
       const currReport = await that.checkTestRunReport(reportId);
       if (currReport.message === 'In progress') {
+        if (!firstCheckReport) {
+          firstCheckReport = false;
+          return Promise.race([
+            polling(),
+            new Promise((resolve, reject) => {
+              timeOut = setTimeout(() => reject(
+                new Error(`create test run report (${reportId}) time exceeds 10 minutes`),
+              ), MAX_RUN_CREATE_REPORT_TIME);
+            }),
+          ]).then((result) => {
+            clearTimeout(timeOut);
+            timeOut = null;
+            return result;
+          }).catch((err) => {
+            clearTimeout(timeOut);
+            timeOut = null;
+            throw err;
+          });
+        }
+
         that.logger.info(`report (${reportId}) is not yet ready`);
         await wait(time);
         return polling();
@@ -442,6 +468,55 @@ class Client {
 
     await wait(time);
     return polling();
+  }
+
+  async getRunStatusAndResultReport(runId, downloadReport, reportTypes, artifacts_folder) {
+    const that = this;
+    let needReLogin = false;
+    let needRetry = false;
+    let retriesCount = 0;
+    do {
+      try {
+        if (that.credentials && needReLogin) {
+          // eslint-disable-next-line no-await-in-loop
+          await that.authClient(that.credentials);
+        }
+        // eslint-disable-next-line no-await-in-loop
+        await that.getTestRunStatusPolling(runId, RUN_POLLING_INTERVAL);
+        if (!downloadReport) {
+          return null;
+        }
+
+        const getReport = async (reportType) => {
+          that.logger.info(`preparing report (${reportType}) ...`);
+          const resultPath = path.join(artifacts_folder, `./results_run_${runId}.${reportType}`);
+          // eslint-disable-next-line no-await-in-loop
+          const report = await that.createTestRunReport(runId, reportType);
+          if (_.isSafeInteger(_.get(report, 'reportId'))) {
+            // eslint-disable-next-line no-await-in-loop
+            return that.getTestRunReportPolling(resultPath, report.reportId, REPORT_POLLING_INTERVAL);
+          }
+          return that.logger.info(`report (${reportType}) is not available`);
+        };
+        let reportPromise = Promise.resolve();
+        _.forEach(reportTypes, (type) => {
+          reportPromise = reportPromise.then(() => getReport(type));
+        });
+        // eslint-disable-next-line no-await-in-loop
+        await reportPromise;
+
+        needRetry = false;
+      } catch (err) {
+        if (retriesCount < MAX_RETRIES_COUNT && err.statusCode === 401) {
+          needReLogin = true;
+          needRetry = true;
+          retriesCount += 1;
+        } else {
+          throw err;
+        }
+      }
+    } while (needRetry);
+    return null;
   }
 }
 
