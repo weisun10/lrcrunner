@@ -26,23 +26,18 @@ const utils = {
 
     const configFileData = await fs.promises.readFile(configFile, 'utf8');
     const config = yaml.load(configFileData);
-
-    if (_.isEmpty(config.modules) || _.isEmpty(config.modules.lrc)) {
-      throw new Error('invalid configuration file: lrc module is missing');
+    const { scenarios } = config;
+    if (_.isEmpty(scenarios)) {
+      throw new Error('invalid configuration file: scenarios is missing');
     }
 
-    if (!_.isArray(config.execution) || (config.execution.length === 0) || (config.execution[0].executor !== 'lrc')) {
-      throw new Error('invalid configuration file: lrc executor is missing');
-    }
-
-    const scenarioName = config.execution[0].scenario;
+    const scenarioName = _.first(_.keys(scenarios));
     if (_.isEmpty(scenarioName)) {
-      throw new Error('invalid configuration file: scenario is missing');
+      throw new Error('invalid configuration file: scenario name is missing');
     }
 
     logger.info(`scenario name: ${scenarioName}`);
-
-    const testOpts = _.get(config, ['scenarios', scenarioName]);
+    const testOpts = _.get(scenarios, scenarioName);
     if (!_.isObject(testOpts)) {
       throw new Error(`no information for scenario: ${scenarioName}`);
     }
