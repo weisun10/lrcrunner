@@ -132,6 +132,9 @@ const run = async () => {
 
     // load generators
     if (_.find(allTestScripts, (allTestScript) => allTestScript.locationType === 1)) { // exist location "On-Premise"
+      if (loadGenerators.length <= 0) {
+        throw new Error('load generators are missing');
+      }
       const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
       // eslint-disable-next-line no-restricted-syntax
       for await (const lgKey of loadGenerators) {
