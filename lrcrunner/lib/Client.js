@@ -165,6 +165,12 @@ class Client {
 
     async function polling() {
       const currStatus = await that.getTestRunStatus(runId);
+      if ((currStatus.detailedStatus === 'RUNNING') && (currStatus.runningVusers !== 0)) {
+        that.logger.info(`RUNNING - ${getRunStatisticString(currStatus)}`);
+      } else {
+        that.logger.info(currStatus.detailedStatus);
+      }
+
       if (lastDetailedStatus === currStatus.detailedStatus) {
         sameDetailedStatusCount += 1;
       } else {
@@ -197,12 +203,6 @@ class Client {
         } else {
           clearTimeout(timeOut);
           timeOut = null;
-        }
-
-        if ((currStatus.detailedStatus === 'RUNNING') && (currStatus.runningVusers !== 0)) {
-          that.logger.info(`RUNNING - ${getRunStatisticString(currStatus)}`);
-        } else {
-          that.logger.info(currStatus.detailedStatus);
         }
 
         return polling();
