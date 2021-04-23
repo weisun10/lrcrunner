@@ -18,7 +18,7 @@ const tunnel = require('tunnel');
 const FormData = require('form-data');
 
 const MAX_DOWNLOAD_TIME = 10 * 60000;
-const MAX_RUN_INITIALIZING_TIME = 10 * 60000;
+const MAX_RUN_STATUS_STUCK_TIME = 10 * 60000;
 const MAX_RUN_CREATE_REPORT_TIME = 10 * 60000;
 const RUN_POLLING_INTERVAL = 20 * 1000;
 const REPORT_POLLING_INTERVAL = 15 * 1000;
@@ -156,30 +156,33 @@ class Client {
 
   async getTestRunStatusPolling(runId, time = 5000) {
     const that = this;
-    let isStartedInitRun = false;
-    let retriesCount = 0;
+    let retriesCount = 0; // number of times to check whether the test run has been terminated
+
+    let timeOut = null; // will set timeout for same detailed state
+    let sameDetailedStatusCount = 0; // number of times in the same detail state
+    let lastDetailedStatus = null; // the detail status of last polling
+    const needSetTimeoutDetailedStatus = ['INITIALIZING', 'STOPPING'];
+
     async function polling() {
       const currStatus = await that.getTestRunStatus(runId);
+      if (lastDetailedStatus === currStatus.detailedStatus) {
+        sameDetailedStatusCount += 1;
+      } else {
+        sameDetailedStatusCount = 0;
+      }
+      lastDetailedStatus = currStatus.detailedStatus;
+      await wait(time);
 
       if (currStatus.status === 'in-progress') {
-        if ((currStatus.detailedStatus === 'RUNNING') && (currStatus.runningVusers !== 0)) {
-          that.logger.info(`RUNNING - ${getRunStatisticString(currStatus)}`);
-        } else {
-          that.logger.info(currStatus.detailedStatus);
-        }
-
-        await wait(time);
-
-        let timeOut = null;
-        if (currStatus.detailedStatus === 'INITIALIZING') {
-          if (!isStartedInitRun) {
-            isStartedInitRun = true;
+        if (_.includes(needSetTimeoutDetailedStatus, currStatus.detailedStatus)) {
+          if (sameDetailedStatusCount === 1) {
+          // only the first time here for each detail status
             return Promise.race([
               polling(),
               new Promise((resolve, reject) => {
                 timeOut = setTimeout(() => reject(
-                  new Error('test run "INITIALIZING" time exceeds 10 minutes'),
-                ), MAX_RUN_INITIALIZING_TIME);
+                  new Error(`test run "${currStatus.detailedStatus}" time exceeds 10 minutes`),
+                ), MAX_RUN_STATUS_STUCK_TIME);
               }),
             ]).then((result) => {
               clearTimeout(timeOut);
@@ -196,8 +199,16 @@ class Client {
           timeOut = null;
         }
 
+        if ((currStatus.detailedStatus === 'RUNNING') && (currStatus.runningVusers !== 0)) {
+          that.logger.info(`RUNNING - ${getRunStatisticString(currStatus)}`);
+        } else {
+          that.logger.info(currStatus.detailedStatus);
+        }
+
         return polling();
       }
+
+      // check if the test run is terminated
       const isTerminated = _.get(await that.getTestRun(runId), 'isTerminated');
       const hasReport = _.includes(hasReportUIStatus, currStatus.detailedStatus) && isTerminated;
       if (!hasReport && retriesCount < MAX_RETRIES_COUNT) {
@@ -432,13 +443,15 @@ class Client {
 
   async getTestRunReportPolling(name, reportId, time = 5000) {
     const that = this;
-    let firstCheckReport = true;
+    let hasStartedToGenerate = false;
     let timeOut = null;
     async function polling() {
       const currReport = await that.checkTestRunReport(reportId);
+      await wait(time);
       if (currReport.message === 'In progress') {
-        if (!firstCheckReport) {
-          firstCheckReport = false;
+        if (!hasStartedToGenerate) {
+          hasStartedToGenerate = true;
+          // only the first time here
           return Promise.race([
             polling(),
             new Promise((resolve, reject) => {
@@ -458,7 +471,6 @@ class Client {
         }
 
         that.logger.info(`report (${reportId}) is not yet ready`);
-        await wait(time);
         return polling();
       }
       that.logger.info('report is ready, going to download it');
