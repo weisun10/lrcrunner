@@ -42,7 +42,7 @@ const utils = {
       throw new Error(`no information for scenario: ${scenarioName}`);
     }
 
-    const lrcCfg = config.modules.lrc;
+    const lrcCfg = (config.modules || {}).lrc;
 
     let lrcUrl = options.url || lrcCfg.url;
     if (_.isEmpty(lrcUrl)) {
