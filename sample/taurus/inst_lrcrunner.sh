@@ -1,6 +1,6 @@
 #!/bin/bash
 
-npm i -g --no-save --production https://github.com/weisun10/lrcrunner.git
+npm i -g --no-save --production https://github.com/weisun10/lrcrunner/releases/download/0.1/lrcrunner-1.0.0.tgz
 if [ $? != 0 ]; then
   echo "failed to install lrcrunner"
   exit 1
@@ -11,7 +11,7 @@ lrcrunner --version
 BZT_FOLDER=`find /usr/local/lib -name bzt-configs.json -type f | xargs dirname`
 echo ${BZT_FOLDER}
 
-curl -o ${BZT_FOLDER}/modules/lrc.py https://github.com/weisun10/lrcrunner/blob/main/sample/taurus/lrc.py
+cp /usr/lib/node_modules/lrcrunner/sample/taurus/lrc.py ${BZT_FOLDER}/modules/lrc.py
 sed -i '/bzt.modules.gatling.GatlingExecutor$/a\
 \  lrc:' ${BZT_FOLDER}/resources/10-base-config.yml
 sed -i '/lrc:$/a\
