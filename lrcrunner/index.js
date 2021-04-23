@@ -95,6 +95,7 @@ const run = async () => {
 
     // test scripts
     logger.info('going to create scripts');
+    const allTestScripts = [];
     // eslint-disable-next-line no-restricted-syntax
     for await (const script of scripts) {
       let scriptId = script.id;
@@ -108,34 +109,39 @@ const run = async () => {
       const testScript = await client.addTestScript(projectId, newTest.id, { scriptId });
       logger.info(`added script ${scriptId} into test`);
       testScript.loadTestScriptId = testScript.id;
-      await client.updateTestScript(projectId, newTest.id, _.merge(testScript, script));
+      const allTestScript = await client.updateTestScript(projectId, newTest.id, _.merge(testScript, script));
+      allTestScripts.push(allTestScript);
       logger.info('updated test script settings');
     }
 
     // vuser distributions
-    const testLocations = await client.getTestDistributionLocations(projectId, newTest.id);
-    // eslint-disable-next-line no-restricted-syntax
-    for await (const distribution of distributions) {
-      const { locationName, vusersPercent } = distribution;
-      const currLocation = _.find(testLocations, { name: locationName });
-      if (currLocation) {
-        await client.updateTestDistributionLocation(projectId, newTest.id, currLocation.id, { vusersPercent });
-        logger.info(`updated vuser distribution: ${locationName} - ${vusersPercent}`);
-      } else {
-        throw new Error(`location "${locationName}" does not exist`);
+    if (_.find(allTestScripts, (allTestScript) => allTestScript.locationType === 0)) { // exist location "Cloud"
+      const testLocations = await client.getTestDistributionLocations(projectId, newTest.id);
+      // eslint-disable-next-line no-restricted-syntax
+      for await (const distribution of distributions) {
+        const { locationName, vusersPercent } = distribution;
+        const currLocation = _.find(testLocations, { name: locationName });
+        if (currLocation) {
+          await client.updateTestDistributionLocation(projectId, newTest.id, currLocation.id, { vusersPercent });
+          logger.info(`updated vuser distribution: ${locationName} - ${vusersPercent}`);
+        } else {
+          throw new Error(`location "${locationName}" does not exist`);
+        }
       }
     }
 
     // load generators
-    const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
-    // eslint-disable-next-line no-restricted-syntax
-    for await (const lgKey of loadGenerators) {
-      const currLg = _.find(projectLoadGenerators, (projectLg) => projectLg.key === lgKey);
-      if (currLg) {
-        await client.assignLgToTest(projectId, newTest.id, currLg.id);
-        logger.info(`assigned load generator "${lgKey}" to test`);
-      } else {
-        throw new Error(`load generator "${lgKey}" does not exist`);
+    if (_.find(allTestScripts, (allTestScript) => allTestScript.locationType === 1)) { // exist location "On-Premise"
+      const projectLoadGenerators = await client.getLoadGenerators(projectId) || [];
+      // eslint-disable-next-line no-restricted-syntax
+      for await (const lgKey of loadGenerators) {
+        const currLg = _.find(projectLoadGenerators, (projectLg) => projectLg.key === lgKey);
+        if (currLg) {
+          await client.assignLgToTest(projectId, newTest.id, currLg.id);
+          logger.info(`assigned load generator "${lgKey}" to test`);
+        } else {
+          throw new Error(`load generator "${lgKey}" does not exist`);
+        }
       }
     }
 
