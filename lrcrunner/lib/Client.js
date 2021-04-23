@@ -510,6 +510,8 @@ class Client {
           }
           return that.logger.info(`report (${reportType}) is not available`);
         };
+
+        this.logger.info(`requested reports: ${reportTypes}`);
         let reportPromise = Promise.resolve();
         _.forEach(reportTypes, (type) => {
           reportPromise = reportPromise.then(() => getReport(type));

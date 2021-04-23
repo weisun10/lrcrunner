@@ -129,11 +129,13 @@ const utils = {
       throw new Error('invalid reportType');
     }
 
-    if (_.isEmpty(scripts)) {
-      scripts = script;
-    }
-    if (!_.isArray(scripts) || scripts.length <= 0) {
-      throw new Error('script is required');
+    if (!testId) {
+      if (_.isEmpty(scripts)) {
+        scripts = script;
+      }
+      if (!_.isArray(scripts) || scripts.length <= 0) {
+        throw new Error('script is required');
+      }
     }
 
     return {

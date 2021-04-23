@@ -155,6 +155,8 @@ const run = async () => {
     // run status and report
     await client.getRunStatusAndResultReport(currRun.runId, downloadReport, reportTypes, artifacts_folder);
   }
+
+  logger.info('done');
 };
 
 run().catch((err) => {
