@@ -4,7 +4,7 @@
   "description": "test executor for LoadRunner Cloud",
   "main": "index.js",
   "author": "Micro Focus or one of its affiliates",
-  "license": "ISC",
+  "license": "MIT",
   "bin": {
     "lrcrunner": "./index.js"
   },
