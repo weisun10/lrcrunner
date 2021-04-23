@@ -109,13 +109,13 @@ const run = async () => {
       const testScript = await client.addTestScript(projectId, newTest.id, { scriptId });
       logger.info(`added script ${scriptId} into test`);
       testScript.loadTestScriptId = testScript.id;
-      const allTestScript = await client.updateTestScript(projectId, newTest.id, _.merge(testScript, script));
-      allTestScripts.push(allTestScript);
+      const currTestScript = await client.updateTestScript(projectId, newTest.id, _.merge(testScript, script));
+      allTestScripts.push(currTestScript);
       logger.info('updated test script settings');
     }
 
     // vuser distributions
-    if (_.find(allTestScripts, (allTestScript) => allTestScript.locationType === 0)) { // exist location "Cloud"
+    if (_.find(allTestScripts, (testScript) => testScript.locationType === 0)) { // exist location "Cloud"
       const testLocations = await client.getTestDistributionLocations(projectId, newTest.id);
       // eslint-disable-next-line no-restricted-syntax
       for await (const distribution of distributions) {
@@ -131,7 +131,7 @@ const run = async () => {
     }
 
     // load generators
-    if (_.find(allTestScripts, (allTestScript) => allTestScript.locationType === 1)) { // exist location "On-Premise"
+    if (_.find(allTestScripts, (testScript) => testScript.locationType === 1)) { // exist location "On-Premise"
       if (loadGenerators.length <= 0) {
         throw new Error('load generators are missing');
       }
