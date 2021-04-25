@@ -33,5 +33,6 @@ module.exports = {
     'no-console': [
       'error', { allow: ['log', 'error', 'warn'] },
     ],
+    'no-await-in-loop': ['off'],
   },
 };

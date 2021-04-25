@@ -141,7 +141,7 @@ const run = async () => {
         const currLg = _.find(projectLoadGenerators, (projectLg) => projectLg.key === lgKey);
         if (currLg) {
           await client.assignLgToTest(projectId, newTest.id, currLg.id);
-          logger.info(`assigned load generator "${lgKey}" to test`);
+          logger.info(`assigned load generator "${currLg.name}" (${lgKey}) to test`);
         } else {
           throw new Error(`load generator "${lgKey}" does not exist`);
         }
