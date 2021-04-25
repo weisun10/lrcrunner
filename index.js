@@ -25,7 +25,7 @@ program.description('test executor for LoadRunner Cloud')
   .option('-a, --artifacts [folder]', 'artifacts folder')
   .option('-i, --client_id [client id]', 'LRC client id')
   .option('-s, --client_secret [client secret]', 'LRC client secret')
-  .option('-t, --tenant [tenant]', 'LRC tenant id');
+  .option('-t, --tenant [tenant id]', 'LRC tenant id');
 program.parse(process.argv);
 
 const logger = utils.createLogger();

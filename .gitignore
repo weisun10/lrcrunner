@@ -2,3 +2,5 @@ node_modules
 *.tgz
 package-lock.json
 .idea
+scripts
+results
