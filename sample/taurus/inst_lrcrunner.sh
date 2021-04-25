@@ -1,6 +1,6 @@
 #!/bin/bash
 
-npm i -g --no-save --production https://github.com/weisun10/lrcrunner/releases/download/0.1/lrcrunner-1.0.0.tgz
+npm i -g --no-save --production https://github.com/weisun10/lrcrunner/releases/download/1.0/lrcrunner-1.0.0.tgz
 if [ $? != 0 ]; then
   echo "failed to install lrcrunner"
   exit 1
