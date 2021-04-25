@@ -24,7 +24,8 @@ program.description('test executor for LoadRunner Cloud')
   .option('-u, --url [url]', 'LRC url')
   .option('-a, --artifacts [folder]', 'artifacts folder')
   .option('-i, --client_id [client id]', 'LRC client id')
-  .option('-s, --client_secret [client secret]', 'LRC client secret');
+  .option('-s, --client_secret [client secret]', 'LRC client secret')
+  .option('-t, --tenant [tenant]', 'LRC tenant id');
 program.parse(process.argv);
 
 const logger = utils.createLogger();
@@ -50,7 +51,12 @@ const run = async () => {
     testOpts, lrcCfg, lrcURLObject, proxy,
   } = await utils.loadAndCheckConfig(options, isLocalTesting, logger);
 
-  logger.info(`LRC url: ${lrcURLObject.href}, tenant: ${lrcCfg.tenant}, client id: ${client_id}`);
+  const tenant = options.tenant || lrcCfg.tenant;
+  if (_.isEmpty(tenant) && !_.isInteger(tenant)) {
+    throw new Error('tenant is missing');
+  }
+
+  logger.info(`LRC url: ${lrcURLObject.href}, tenant: ${tenant}, client id: ${client_id}`);
 
   // load test options
   const {
@@ -59,7 +65,7 @@ const run = async () => {
   } = await utils.loadAndCheckTestOpts(testOpts, logger);
 
   // start main progress
-  const client = new Client(lrcCfg.tenant, lrcURLObject, proxy, logger);
+  const client = new Client(tenant, lrcURLObject, proxy, logger);
   if (!isLocalTesting) {
     await client.authClient({ client_id, client_secret });
   }
@@ -73,7 +79,7 @@ const run = async () => {
 
     // run test
     const currRun = await client.runTest(projectId, testId);
-    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, lrcCfg.tenant, currRun.runId)}`);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, tenant, currRun.runId)}`);
 
     // run status and report
     await client.getRunStatusAndResultReport(currRun.runId, downloadReport, reportTypes, artifacts_folder);
@@ -155,7 +161,7 @@ const run = async () => {
     }
     logger.info(`running test: ${newTest.name} ...`);
     const currRun = await client.runTest(projectId, newTest.id);
-    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, lrcCfg.tenant, currRun.runId)}`);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, tenant, currRun.runId)}`);
     if (detach) {
       logger.info('"detach" flag is enabled. exit');
       return;
