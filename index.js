@@ -17,15 +17,16 @@ const _ = require('lodash');
 const { program } = require('commander');
 const Client = require('./lib/Client');
 const utils = require('./lib/utils');
+const { version } = require('./package.json');
 
-program.version('1.0.0', '-v, --version', 'print version');
-program.description('test executor for LoadRunner Cloud')
+program.version(version, '-v, --version', 'print version');
+program.description(`test executor for LoadRunner Cloud (version: ${version})`)
   .option('-r, --run [config file]', 'run with specified configuration file', '')
   .option('-u, --url [url]', 'LRC url')
-  .option('-a, --artifacts [folder]', 'artifacts folder')
   .option('-i, --client_id [client id]', 'LRC client id')
   .option('-s, --client_secret [client secret]', 'LRC client secret')
-  .option('-t, --tenant [tenant id]', 'LRC tenant id');
+  .option('-t, --tenant [tenant id]', 'LRC tenant id')
+  .option('-a, --artifacts [folder]', 'artifacts folder');
 program.parse(process.argv);
 
 const logger = utils.createLogger();
