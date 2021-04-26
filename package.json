@@ -1,6 +1,6 @@
 {
   "name": "lrcrunner",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "test executor for LoadRunner Cloud",
   "main": "index.js",
   "author": "Micro Focus or one of its affiliates",
