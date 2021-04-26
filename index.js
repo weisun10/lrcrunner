@@ -79,7 +79,7 @@ const run = async () => {
 
     // run test
     const currRun = await client.runTest(projectId, testId);
-    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, tenant, currRun.runId)}`);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject, tenant, projectId, currRun.runId, isLocalTesting)}`);
 
     // run status and report
     await client.getRunStatusAndResultReport(currRun.runId, downloadReport, reportTypes, artifacts_folder);
@@ -161,7 +161,7 @@ const run = async () => {
     }
     logger.info(`running test: ${newTest.name} ...`);
     const currRun = await client.runTest(projectId, newTest.id);
-    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject.href, tenant, currRun.runId)}`);
+    logger.info(`run id: ${currRun.runId}, url: ${utils.getDashboardUrl(lrcURLObject, tenant, projectId, currRun.runId, isLocalTesting)}`);
     if (detach) {
       logger.info('"detach" flag is enabled. exit');
       return;
