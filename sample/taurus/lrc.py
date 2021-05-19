@@ -86,6 +86,9 @@ class LRCExecutor(ScenarioExecutor, FileLister, WidgetProvider, HavingInstallabl
     def has_results(self):
         return True
 
+    def get_script_path(self, required=False, scenario=None):
+        return "script"
+
     def install_required_tools(self):
         self.lrc = self._get_tool(LRC, config=self.settings)
         self.lrc.tool_name = self.lrc.tool_name.lower()
