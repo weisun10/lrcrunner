@@ -10,7 +10,7 @@ It utilizes LoadRunner Cloud [Public APIs](https://loadrunner-cloud.saas.microfo
 ### Installation
 
 ```bash
-npm install -g --no-save --production https://github.com/weisun10/lrcrunner/releases/download/1.0/lrcrunner-1.0.0.tgz
+npm install -g --no-save --production https://github.com/weisun10/lrcrunner/releases/download/1.0.4/lrcrunner-1.0.4.tgz
 ```
 ### Usage
 
@@ -48,7 +48,7 @@ scenarios:
       description: my test # test description
       licenseMode: 0 # license modes: "VUH": 0, "VU": 1, "Mixed VU / VUH": 2
       runMode: 1     # run modes: "Duration": 0, "Iterations": 1, "Goal Oriented": 2
-    script:
+    scripts:
       - vusersNum: 10                    
         path: ./scripts/web test.zip     # path to your script
         #id: 1                           # use existing script
