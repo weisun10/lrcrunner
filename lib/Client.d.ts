@@ -1,4 +1,4 @@
-/// <reference types="node" />
+
 export = Client;
 declare class Client {
     constructor(tenant: any, url: any, proxy: any, logger: any);
